@@ -1,0 +1,32 @@
+# 🎯 Viral Clipper Web App Dependencies
+# Core web framework
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+
+# Video processing
+ffmpeg-python==0.2.0
+opencv-python==4.8.1.78
+numpy==1.24.3
+
+# Audio analysis and transcription
+librosa==0.10.1
+openai-whisper==20230918
+torch==2.1.0
+torchaudio==2.1.0
+
+# YouTube integration
+yt-dlp==2023.7.6
+google-api-python-client==2.100.0
+google-auth-httplib2==0.1.1
+google-auth-oauthlib==1.0.0
+google-auth==2.23.3
+
+# Data processing
+pandas==2.0.3
+scipy==1.11.2
+scikit-learn==1.3.0
+
+# Utilities
+requests==2.31.0
+python-dateutil==2.8.2
+colorama==0.4.6
