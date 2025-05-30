@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 Viral Clipper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🎯 Viral Clipper</h1>
+            <p>Automatically generate viral clips with speaker switching and captions</p>
+        </header>
+
+        <!-- Screen 1: Input Form -->
+        <div id="screen1" class="screen active">
+            <div class="form-container">
+                <h2>📹 Create Viral Clip</h2>
+                
+                <form id="clipForm" class="clip-form">
+                    <!-- YouTube URL -->
+                    <div class="input-group">
+                        <label for="youtube-url">YouTube Video URL</label>
+                        <input type="url" id="youtube-url" name="url" 
+                               placeholder="https://www.youtube.com/watch?v=..." 
+                               required>
+                        <div class="input-help">Paste the full YouTube video URL</div>
+                    </div>
+
+                    <!-- Clip Duration -->
+                    <div class="input-group">
+                        <label for="duration">Clip Duration (seconds)</label>
+                        <input type="number" id="duration" name="duration" 
+                               value="30" min="10" max="60" required>
+                        <div class="input-help">Length of final clip (10-60 seconds)</div>
+                    </div>
+
+                    <!-- Manual Time Selection -->
+                    <div class="time-selection">
+                        <h3>⏰ Time Selection</h3>
+                        <div class="time-inputs">
+                            <div class="input-group">
+                                <label for="start-time">Start Time (MM:SS or seconds)</label>
+                                <input type="text" id="start-time" name="start_time" 
+                                       placeholder="5:30 or 330">
+                                <div class="input-help">Optional - leave blank for auto-detection</div>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="end-time">End Time (MM:SS or seconds)</label>
+                                <input type="text" id="end-time" name="end_time" 
+                                       placeholder="6:00 or 360">
+                                <div class="input-help">Optional - overrides duration if set</div>
+                            </div>
+                        </div>
+                        
+                        <div class="auto-detection-info">
+                            <h4>🤖 Auto-Detection Features:</h4>
+                            <ul>
+                                <li>🎵 Audio energy analysis</li>
+                                <li>🎤 Speech pattern detection</li>
+                                <li>📍 Optimal timing heuristics</li>
+                                <li>🔄 Multi-signal confidence scoring</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Generate Button -->
+                    <button type="submit" class="generate-btn">
+                        🚀 Generate Viral Clip
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Progress Screen -->
+        <div id="progress-screen" class="screen">
+            <div class="progress-container">
+                <h2>🔄 Generating Your Viral Clip</h2>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                
+                <div class="progress-info">
+                    <div class="progress-percentage" id="progress-percentage">0%</div>
+                    <div class="progress-message" id="progress-message">Initializing...</div>
+                </div>
+                
+                <div class="progress-steps">
+                    <div class="step" id="step-download">📥 Downloading video</div>
+                    <div class="step" id="step-analyze">🎯 Analyzing optimal moments</div>
+                    <div class="step" id="step-speakers">👥 Detecting speakers</div>
+                    <div class="step" id="step-captions">📝 Generating captions</div>
+                    <div class="step" id="step-video">🎥 Creating final video</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Modal -->
+        <div id="error-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>❌ Error</h3>
+                <p id="error-message"></p>
+                <button id="close-error-btn" class="action-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
