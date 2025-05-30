@@ -1,0 +1,165 @@
+# 🔐 OAuth & API Credentials - NEVER COMMIT THESE!
+client_secrets.json
+token.pickle
+token_readonly.pickle
+*.json
+!requirements*.json
+!package*.json
+
+# 🔑 API Keys & Environment Variables
+.env
+.env.local
+.env.production
+*.key
+*.pem
+*.p12
+*.pfx
+
+# 📹 Media Files & Downloads
+downloads/
+clips/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.flac
+
+# 🐍 Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 🧪 Testing & Coverage
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+htmlcov/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# 🌐 Flask & Web
+instance/
+.webassets-cache
+.flask_session
+
+# 💾 Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# 📝 Logs
+*.log
+logs/
+log/
+
+# 🔧 IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.spyderproject
+.spyproject
+.ropeproject
+
+# 🍎 macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# 🪟 Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# 🐧 Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# 📦 Node.js (if you add any frontend build tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 🔄 Version Control & Backups
+*.orig
+*.bak
+*.backup
+*_backup.py
+*_original_backup.py
+
+# 🧹 Temporary Files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# 🎯 Project Specific
+# Backup files created by the app
+app_original_backup.py
+static/script_original_backup.js
+fixed_*.py
+*_fixed.py
+
+# Configuration caches
+configs/*.json
+!configs/README.md
+
+# Archive directory (keep structure but not large files)
+archive/*.mp4
+archive/*.avi
+
+# Version control analysis (may contain sensitive paths)
+version_control_analysis.py
+version_manifest.json
