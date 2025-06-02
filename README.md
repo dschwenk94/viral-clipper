@@ -1,15 +1,16 @@
-# 🎯 Viral Clipper - YouTube Shorts Generator
+# 🎯 Clippy - Viral YouTube Shorts Generator
 
-Automatically generate viral clips from long-form YouTube videos with speaker switching, dynamic captions, and seamless YouTube upload integration.
+Automatically generate viral clips from long-form YouTube videos with AI-powered speaker detection, dynamic captions, and seamless YouTube upload integration.
 
 ## ✨ Features
 
-- **🤖 Auto-Peak Detection**: Intelligent identification of viral moments
+- **🤖 Auto-Peak Detection**: Intelligent identification of viral moments using AI heuristics
 - **👥 Speaker Detection**: Dynamic video cropping and speaker switching  
 - **📝 Smart Captions**: Phrase-by-phrase captions with speaker-specific colors
 - **🎨 Real-time Editing**: Live caption editing with instant preview
 - **📤 YouTube Integration**: One-click upload to YouTube Shorts with OAuth
 - **🔄 Hybrid Processing**: Live preview + background video regeneration
+- **🎬 ASS & SRT Support**: Advanced subtitle formats with rich styling
 
 ## 🚀 Quick Start
 
@@ -17,14 +18,14 @@ Automatically generate viral clips from long-form YouTube videos with speaker sw
 
 - Python 3.8+
 - FFmpeg installed and in PATH
-- Google Cloud Project with YouTube Data API v3 enabled
+- Google Cloud Project with YouTube Data API v3 enabled (for upload feature)
 
 ### Installation
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/dschwenk94/viral-clipper.git
-   cd viral-clipper
+   git clone https://github.com/dschwenk94/Clippy.git
+   cd Clippy
    ```
 
 2. **Install dependencies**
@@ -37,7 +38,7 @@ Automatically generate viral clips from long-form YouTube videos with speaker sw
    - **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
    - **Linux**: `sudo apt install ffmpeg`
 
-4. **Set up Google OAuth** (Required for YouTube upload)
+4. **Set up Google OAuth** (Optional - for YouTube upload)
    - Go to [Google Cloud Console](https://console.cloud.google.com/)
    - Create/select a project
    - Enable YouTube Data API v3
@@ -58,6 +59,24 @@ Access the web interface at: `http://localhost:5000`
 2. **Edit Captions**: Real-time caption editing with speaker assignment
 3. **Upload to YouTube**: One-click upload with OAuth authentication
 
+## 🆕 What's New (v1.0.0 - June 2025)
+
+### Major Features
+- Full Flask web application with WebSocket support
+- ASS caption system with advanced styling
+- Fixed caption timing drift issues
+- Real-time caption editing interface
+- YouTube OAuth integration
+- Improved speaker detection algorithms
+
+### Bug Fixes
+- ✅ Fixed caption synchronization drift
+- ✅ Fixed regex escape errors in viral word formatting
+- ✅ Fixed fragmented caption merging
+- ✅ Improved caption overlap prevention
+
+See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for upgrading from previous versions.
+
 ## 🔧 Configuration
 
 ### OAuth Setup
@@ -71,10 +90,12 @@ The app requires YouTube OAuth for uploading. On first upload:
 ### File Structure
 
 ```
-viral-clipper/
+Clippy/
 ├── app.py                          # Main Flask application
 ├── auto_peak_viral_clipper.py      # Core clip generation
 ├── enhanced_heuristic_peak_detector.py  # Peak detection algorithms
+├── ass_caption_update_system_v2.py # Fixed caption system
+├── srt_viral_caption_system.py    # SRT caption support
 ├── client_secrets.json             # OAuth credentials (create this)
 ├── static/                         # Frontend assets
 ├── templates/                      # HTML templates
@@ -107,14 +128,6 @@ viral-clipper/
 - Viral word highlighting
 - Real-time editing with live preview
 
-## 🔧 API Endpoints
-
-- `POST /api/generate_clip` - Start clip generation
-- `GET /api/oauth/status` - Check authentication status  
-- `POST /api/oauth/authenticate` - Start OAuth flow
-- `POST /api/upload_to_youtube` - Upload to YouTube
-- `POST /api/update_captions` - Update captions with regeneration
-
 ## 🐛 Troubleshooting
 
 ### Common Issues
@@ -125,41 +138,26 @@ viral-clipper/
 ffmpeg -version
 ```
 
+**Caption timing issues**
+- Run `python apply_timing_fix.py` to apply the latest timing fixes
+- See [CAPTION_TIMING_FIX.md](CAPTION_TIMING_FIX.md) for details
+
 **OAuth authentication fails**
 - Ensure `client_secrets.json` is in project root
 - Check Google Cloud Console OAuth setup
 - Verify YouTube Data API v3 is enabled
 
-**Video download fails**  
-- Check YouTube URL format
-- Some videos may be geo-restricted
-- Update yt-dlp: `pip install --upgrade yt-dlp`
-
-## 🎯 Architecture
-
-### Backend Components
-- **Flask App** (`app.py`): Main web application with SocketIO
-- **Auto-Peak Detector** (`auto_peak_viral_clipper.py`): Core clip generation
-- **Peak Detection Engine** (`enhanced_heuristic_peak_detector.py`): AI moment detection
-- **Speaker Systems**: Face detection, clustering, and video cropping
-- **Caption Engine**: Whisper transcription with phrase-level timing
-
-### Frontend
-- **Modern UI**: Dark theme with responsive design
-- **Real-time Updates**: WebSocket-powered progress tracking
-- **Live Editing**: Caption editing with instant preview
-- **Hybrid Approach**: Live preview + background regeneration
-
 ## 📄 License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch
-3. Make changes
-4. Submit pull request
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
 
 ## ⚠️ Legal Notice
 
@@ -176,4 +174,4 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Built with AI assistance** 🤖 - Automated viral moment detection powered by advanced heuristics and machine learning.
+**Built with ❤️ and AI** - Making viral content creation accessible to everyone
