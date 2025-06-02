@@ -1,36 +1,12 @@
-# 🔐 OAuth & API Credentials - NEVER COMMIT THESE!
-client_secrets.json
-token.pickle
-token_readonly.pickle
-*.json
-!requirements*.json
-!package*.json
-
-# 🔑 API Keys & Environment Variables
-.env
-.env.local
-.env.production
-*.key
-*.pem
-*.p12
-*.pfx
-
-# 📹 Media Files & Downloads
-downloads/
-clips/
-*.mp4
-*.avi
-*.mov
-*.mkv
-*.wav
-*.mp3
-*.flac
-
-# 🐍 Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -44,122 +20,101 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# 🧪 Testing & Coverage
-.coverage
-.pytest_cache/
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
 .tox/
 .nox/
 .coverage
-htmlcov/
+.coverage.*
 .cache
 nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
+.pytest_cache/
+cover/
 
-# 🌐 Flask & Web
+# Flask stuff:
 instance/
 .webassets-cache
-.flask_session
 
-# 💾 Databases
-*.db
-*.sqlite
-*.sqlite3
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# 📝 Logs
-*.log
-logs/
-log/
-
-# 🔧 IDEs & Editors
+# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.spyderproject
-.spyproject
-.ropeproject
-
-# 🍎 macOS
 .DS_Store
-.AppleDouble
-.LSOverride
-Icon?
-._*
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
 
-# 🪟 Windows
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.stackdump
-[Dd]esktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
+# Clippy specific
+client_secrets.json
+token.pickle
+*.pickle
+downloads/*
+clips/*
+!downloads/.gitkeep
+!clips/.gitkeep
 
-# 🐧 Linux
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-.nfs*
-
-# 📦 Node.js (if you add any frontend build tools)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# 🔄 Version Control & Backups
-*.orig
-*.bak
-*.backup
-*_backup.py
-*_original_backup.py
-
-# 🧹 Temporary Files
-tmp/
-temp/
+# Temporary files
 *.tmp
 *.temp
+*.log
+*.wav
+*.mp4
+*.avi
+*.mov
+.tmp/
 
-# 🎯 Project Specific
-# Backup files created by the app
-app_original_backup.py
-static/script_original_backup.js
-fixed_*.py
-*_fixed.py
+# Backup files
+*.backup
+*.bak
+backups/
 
-# Configuration caches
-configs/*.json
-!configs/README.md
+# OAuth and credentials
+credentials.json
+client_secret*.json
+token*.json
+oauth*.json
 
-# Archive directory (keep structure but not large files)
-archive/*.mp4
-archive/*.avi
+# Test files
+test_*.mp4
+test_*.wav
+*_test.*
 
-# Version control analysis (may contain sensitive paths)
-version_control_analysis.py
-version_manifest.json
+# Cache
+.cache/
+*.cache
+
+# System files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+._*
+
+# Keep directory structure
+!.gitkeep
