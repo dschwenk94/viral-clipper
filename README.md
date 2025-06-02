@@ -1,24 +1,29 @@
-# 🎯 Clippy - Viral YouTube Shorts Generator
+# 🎯 Clippy - AI-Powered Viral Clip Generator
 
-Automatically generate viral clips from long-form YouTube videos with AI-powered speaker detection, dynamic captions, and seamless YouTube upload integration.
+Transform long-form YouTube videos into viral shorts with AI-powered speaker detection, dynamic captions, and seamless YouTube upload integration.
 
 ## ✨ Features
 
-- **🤖 Auto-Peak Detection**: Intelligent identification of viral moments using AI heuristics
-- **👥 Speaker Detection**: Dynamic video cropping and speaker switching  
+### Core Functionality
+- **🤖 Auto-Peak Detection**: AI identifies the most engaging moments in videos
+- **👥 Speaker Detection & Switching**: Dynamically crops video to focus on current speaker
 - **📝 Smart Captions**: Phrase-by-phrase captions with speaker-specific colors
-- **🎨 Real-time Editing**: Live caption editing with instant preview
+- **✏️ Real-time Caption Editing**: Edit captions with instant preview
 - **📤 YouTube Integration**: One-click upload to YouTube Shorts with OAuth
-- **🔄 Hybrid Processing**: Live preview + background video regeneration
-- **🎬 ASS & SRT Support**: Advanced subtitle formats with rich styling
+- **🔄 Live Updates**: Real-time progress tracking via WebSocket
+
+### Recent Improvements (June 2025)
+- ✅ **Fixed caption timing drift** - Captions now stay perfectly synced
+- ✅ **Fixed regex escape errors** - Viral word formatting works reliably
+- ✅ **Enhanced ASS caption system** - Better speaker color support
+- ✅ **Improved fragmented caption handling** - Smarter caption merging
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
 - Python 3.8+
 - FFmpeg installed and in PATH
-- Google Cloud Project with YouTube Data API v3 enabled (for upload feature)
+- (Optional) Google Cloud Project with YouTube Data API v3 enabled
 
 ### Installation
 
@@ -55,78 +60,61 @@ Access the web interface at: `http://localhost:5000`
 
 ## 📖 Usage
 
-1. **Generate Clip**: Enter YouTube URL and customize timing
-2. **Edit Captions**: Real-time caption editing with speaker assignment
-3. **Upload to YouTube**: One-click upload with OAuth authentication
+### Basic Workflow
+1. **Enter YouTube URL**: Paste any YouTube video link
+2. **Set Time Range**: Choose start/end times or use auto-detection
+3. **Generate Clip**: AI finds speakers and creates optimal short
+4. **Edit Captions**: Adjust text and speaker assignments
+5. **Upload to YouTube**: One-click upload with metadata
 
-## 🆕 What's New (v1.0.0 - June 2025)
-
-### Major Features
-- Full Flask web application with WebSocket support
-- ASS caption system with advanced styling
-- Fixed caption timing drift issues
-- Real-time caption editing interface
-- YouTube OAuth integration
-- Improved speaker detection algorithms
-
-### Bug Fixes
-- ✅ Fixed caption synchronization drift
-- ✅ Fixed regex escape errors in viral word formatting
-- ✅ Fixed fragmented caption merging
-- ✅ Improved caption overlap prevention
-
-See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for upgrading from previous versions.
+### Advanced Features
+- **Manual Time Selection**: Override AI detection with specific timestamps
+- **Speaker Assignment**: Manually assign caption colors to different speakers
+- **Viral Word Highlighting**: Automatically emphasizes engaging words
+- **Caption Timing Adjustment**: Fine-tune caption display timing
 
 ## 🔧 Configuration
 
 ### OAuth Setup
-
-The app requires YouTube OAuth for uploading. On first upload:
-
-1. Click "🔑 Authenticate with YouTube" 
+For YouTube upload functionality:
+1. Click "🔑 Authenticate with YouTube" in the web interface
 2. Complete OAuth flow in browser
-3. Credentials are saved for future use
+3. Credentials are saved in `token.pickle` for future use
 
 ### File Structure
-
 ```
 Clippy/
-├── app.py                          # Main Flask application
-├── auto_peak_viral_clipper.py      # Core clip generation
-├── enhanced_heuristic_peak_detector.py  # Peak detection algorithms
-├── ass_caption_update_system_v2.py # Fixed caption system
-├── srt_viral_caption_system.py    # SRT caption support
-├── client_secrets.json             # OAuth credentials (create this)
-├── static/                         # Frontend assets
-├── templates/                      # HTML templates
-├── clips/                          # Generated clips (auto-created)
-├── downloads/                      # Downloaded videos (auto-created)
-└── requirements_webapp.txt         # Python dependencies
+├── app.py                              # Main Flask application
+├── auto_peak_viral_clipper.py          # Core clip generation engine
+├── enhanced_heuristic_peak_detector.py # AI moment detection
+├── ass_caption_update_system_v2.py     # Fixed caption system
+├── srt_viral_caption_system.py         # SRT caption support
+├── static/                             # Frontend assets
+├── templates/                          # HTML templates
+├── clips/                              # Generated clips (auto-created)
+├── downloads/                          # Video cache (auto-created)
+└── client_secrets.json                 # OAuth credentials (you create)
 ```
 
-## 🛡️ Security
+## 🎥 Supported Formats
 
-- OAuth credentials are stored locally in `token.pickle`
-- Videos default to "Private" upload for safety
-- All sensitive files are excluded from version control
+### Input
+- Any public YouTube video
+- Recommended: Videos with clear speech and multiple speakers
 
-## 🎥 Features Deep Dive
+### Output
+- **Video**: MP4 (H.264) optimized for social media
+- **Aspect Ratio**: 9:16 (vertical) for Shorts/Reels/TikTok
+- **Captions**: Burned-in with customizable styling
+- **Duration**: Configurable (default 30 seconds)
 
-### Auto-Peak Detection
-- Analyzes audio energy patterns
-- Identifies natural conversation breaks
-- Scores moments for viral potential
+## 🛠️ API Endpoints
 
-### Speaker Switching
-- Face detection and clustering
-- Dynamic video cropping per speaker
-- Smooth transitions between speakers
-
-### Smart Captions
-- Phrase-by-phrase timing
-- Speaker-specific colors
-- Viral word highlighting
-- Real-time editing with live preview
+- `POST /api/generate_clip` - Start clip generation
+- `GET /api/job_status/<job_id>` - Check processing status
+- `POST /api/update_captions` - Update and regenerate captions
+- `POST /api/upload_to_youtube` - Upload to YouTube
+- `GET /api/oauth/status` - Check authentication status
 
 ## 🐛 Troubleshooting
 
@@ -134,18 +122,45 @@ Clippy/
 
 **FFmpeg not found**
 ```bash
-# Test FFmpeg installation
+# Verify installation
 ffmpeg -version
+# Add to PATH if needed
 ```
 
 **Caption timing issues**
-- Run `python apply_timing_fix.py` to apply the latest timing fixes
-- See [CAPTION_TIMING_FIX.md](CAPTION_TIMING_FIX.md) for details
+- Run `python apply_caption_hotfix.py` to apply latest fixes
+- Ensure you're using `ass_caption_update_system_v2.py`
 
 **OAuth authentication fails**
-- Ensure `client_secrets.json` is in project root
-- Check Google Cloud Console OAuth setup
-- Verify YouTube Data API v3 is enabled
+- Verify `client_secrets.json` exists and is valid
+- Check YouTube Data API v3 is enabled in Google Cloud Console
+- Delete `token.pickle` and re-authenticate
+
+**Video download fails**
+- Check YouTube URL is valid and video is public
+- Update yt-dlp: `pip install --upgrade yt-dlp`
+
+## 🏗️ Architecture
+
+### Backend Components
+- **Flask + SocketIO**: Web framework with real-time updates
+- **Whisper**: OpenAI's speech recognition for transcription
+- **OpenCV**: Face detection and video processing
+- **FFmpeg**: Video encoding and caption burning
+- **yt-dlp**: YouTube video downloading
+
+### Caption Systems
+- **ASS (Advanced SubStation)**: Primary format with rich styling
+- **SRT**: Fallback format for compatibility
+
+### Processing Pipeline
+1. Download video segment
+2. Detect speakers using face recognition
+3. Transcribe audio with Whisper
+4. Generate phrase-level captions
+5. Create speaker-switching video
+6. Burn in styled captions
+7. Optimize for social media
 
 ## 📄 License
 
@@ -154,24 +169,25 @@ MIT License - see [LICENSE](LICENSE) file for details
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
 ## ⚠️ Legal Notice
 
 - Ensure you have rights to use content you're clipping
 - Respect YouTube's Terms of Service
-- Consider fair use guidelines for short clips
-- Add proper attribution to original creators
+- Consider fair use guidelines for derivative content
+- Always credit original creators
 
-## 🔗 Links
+## 🙏 Acknowledgments
 
-- [YouTube Data API Documentation](https://developers.google.com/youtube/v3)
-- [FFmpeg Documentation](https://ffmpeg.org/documentation.html)
-- [Flask Documentation](https://flask.palletsprojects.com/)
+- **OpenAI Whisper** for transcription capabilities
+- **FFmpeg** for video processing
+- **yt-dlp** community for YouTube downloading
+- All contributors and testers
 
 ---
 
-**Built with ❤️ and AI** - Making viral content creation accessible to everyone
+**Built with ❤️ for content creators** | [Report Issues](https://github.com/dschwenk94/Clippy/issues) | [Migration Guide](MIGRATION_GUIDE.md)
