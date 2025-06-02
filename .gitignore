@@ -1,36 +1,12 @@
-# 🔐 OAuth & API Credentials - NEVER COMMIT THESE!
-client_secrets.json
-token.pickle
-token_readonly.pickle
-*.json
-!requirements*.json
-!package*.json
-
-# 🔑 API Keys & Environment Variables
-.env
-.env.local
-.env.production
-*.key
-*.pem
-*.p12
-*.pfx
-
-# 📹 Media Files & Downloads
-downloads/
-clips/
-*.mp4
-*.avi
-*.mov
-*.mkv
-*.wav
-*.mp3
-*.flac
-
-# 🐍 Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -49,117 +25,133 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
+PIPFILE.lock
 
-# 🧪 Testing & Coverage
-.coverage
-.pytest_cache/
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
 .tox/
 .nox/
 .coverage
-htmlcov/
+.coverage.*
 .cache
 nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
+.pytest_cache/
 
-# 🌐 Flask & Web
+# Flask stuff:
 instance/
 .webassets-cache
-.flask_session
 
-# 💾 Databases
-*.db
-*.sqlite
-*.sqlite3
+# Scrapy stuff:
+.scrapy
 
-# 📝 Logs
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Clippy specific
+token.pickle
+client_secrets.json
+downloads/*
+clips/*
+*.mp4
+*.wav
+*.srt
+*.ass
+*.vtt
+.DS_Store
+
+# Backup files
+*.backup
+*.bak
+*_backup_*
+backups/
+
+# Test files
+test_*.mp4
+test_*.srt
+test_*.ass
+
+# Temporary files
+*.tmp
+*.temp
+*_temp.*
+*_CLEAN_FIXED.*
+
+# Log files
 *.log
 logs/
-log/
 
-# 🔧 IDEs & Editors
-.vscode/
+# IDE
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
-.spyderproject
-.spyproject
-.ropeproject
 
-# 🍎 macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-Icon?
-._*
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
-
-# 🪟 Windows
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.stackdump
-[Dd]esktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
-
-# 🐧 Linux
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-.nfs*
-
-# 📦 Node.js (if you add any frontend build tools)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# 🔄 Version Control & Backups
-*.orig
-*.bak
-*.backup
-*_backup.py
-*_original_backup.py
-
-# 🧹 Temporary Files
-tmp/
-temp/
-*.tmp
-*.temp
-
-# 🎯 Project Specific
-# Backup files created by the app
-app_original_backup.py
-static/script_original_backup.js
-fixed_*.py
-*_fixed.py
-
-# Configuration caches
-configs/*.json
-!configs/README.md
-
-# Archive directory (keep structure but not large files)
-archive/*.mp4
-archive/*.avi
-
-# Version control analysis (may contain sensitive paths)
-version_control_analysis.py
-version_manifest.json
+# Keep important directories but not their contents
+!downloads/.gitkeep
+!clips/.gitkeep
