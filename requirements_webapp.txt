@@ -4,6 +4,14 @@ Flask-SocketIO==5.3.6
 python-socketio==5.8.0
 python-engineio==4.7.1
 
+# Database
+psycopg2-binary==2.9.9
+psycopg2-pool==1.1
+
+# Security & Encryption
+cryptography==41.0.7
+python-dotenv==1.0.0
+
 # Existing requirements
 selenium==4.15.2
 yt-dlp==2023.10.13
@@ -15,11 +23,11 @@ google-auth-httplib2==0.1.1
 requests==2.31.0
 webdriver-manager==4.0.1
 
-# Audio analysis
+# Audio analysis - Updated for Python 3.12 compatibility
 opencv-python==4.8.1.78
 openai-whisper==20231117
 librosa==0.10.1
-numpy==1.24.4
-scipy==1.11.4
-torch==2.1.0
-torchaudio==2.1.0
+numpy>=1.26.0  # Updated to support Python 3.12
+scipy>=1.11.0  # Updated to match numpy version
+torch>=2.1.0  # Let pip find compatible version
+torchaudio>=2.1.0  # Let pip find compatible version
