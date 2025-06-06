@@ -1,0 +1,21 @@
+# Minimal requirements for multi-user setup
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+python-socketio==5.8.0
+python-engineio==4.7.1
+
+# Database
+psycopg2-binary==2.9.9
+
+# Security & Encryption
+cryptography==41.0.7
+
+# Google APIs
+google-api-python-client==2.108.0
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+
+# Other requirements
+requests==2.31.0
+python-dotenv==0.21.0
