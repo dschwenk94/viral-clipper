@@ -18,7 +18,7 @@ from dataclasses import dataclass
 # Import our systems
 from viral_clipper_complete import ViralClipGenerator as BaseClipGenerator, Speaker
 from enhanced_heuristic_peak_detector import EnhancedHeuristicPeakDetector, ViralMoment
-from ass_caption_update_system_v5 import ASSCaptionUpdateSystemV5 as ASSCaptionUpdateSystem
+from ass_caption_update_system_v6 import ASSCaptionUpdateSystemV6 as ASSCaptionUpdateSystem
 
 @dataclass
 class PhraseSegment:

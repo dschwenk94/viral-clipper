@@ -26,7 +26,7 @@ import psycopg2.extras
 # Import our modules
 from auto_peak_viral_clipper import AutoPeakViralClipper
 from caption_fragment_fix import merge_fragmented_captions
-from ass_caption_update_system_v5 import ASSCaptionUpdateSystemV5 as ASSCaptionUpdateSystem
+from ass_caption_update_system_v6 import ASSCaptionUpdateSystemV6 as ASSCaptionUpdateSystem
 
 # Import auth modules
 from auth import login_required, get_current_user, OAuthManager, User
@@ -906,7 +906,7 @@ def regenerate_video_background_ass(job_id, updated_captions):
             'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 30,
-            'message': 'Updating ASS captions...'
+            'message': f'Synchronizing {len(updated_captions)} captions with original speech timing...'
         }, room=job_id)
         
         # CRITICAL FIX: Use the video duration for proper caption distribution
@@ -922,7 +922,7 @@ def regenerate_video_background_ass(job_id, updated_captions):
             'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 50,
-            'message': 'Creating video with updated captions...'
+            'message': f'Speech-synchronized captions created - burning into video...'
         }, room=job_id)
         
         temp_ass_path = original_video_path.replace('.mp4', '_ASS_temp.mp4')
@@ -983,7 +983,7 @@ def regenerate_video_background_ass(job_id, updated_captions):
             'regeneration_job_id': job.regeneration_job_id,
             'status': 'completed',
             'progress': 100,
-            'message': 'Video updated with captions!'
+            'message': f'Video updated with speech-synchronized captions!'
         }, room=job_id)
         
     except Exception as e:

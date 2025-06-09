@@ -162,42 +162,57 @@ class ASSCaptionUpdateSystemV5:
         
         redistributed_captions = []
         
-        # Calculate timing for even distribution
-        total_caption_time = video_duration * 0.85  # Use 85% of video time for captions
+        if len(captions) == 0:
+            return redistributed_captions
+        
+        # Calculate timing for FULL video distribution
+        total_caption_time = video_duration * 0.90  # Use 90% of video time for captions
         start_offset = video_duration * 0.05  # Start at 5% into video
         
-        avg_caption_duration = 1.5  # Average duration per caption
-        gap_between_captions = (total_caption_time - (len(captions) * avg_caption_duration)) / max(1, len(captions) - 1)
-        
-        # Ensure reasonable gap
-        gap_between_captions = max(0.3, min(2.0, gap_between_captions))
-        
+        # Distribute captions evenly across the time span
+        if len(captions) == 1:
+            # Single caption - place in middle
+            caption_duration = min(3.0, video_duration * 0.3)
+            start_time = (video_duration - caption_duration) / 2
+            end_time = start_time + caption_duration
+        else:
+            # Multiple captions - distribute evenly
+            time_per_caption_slot = total_caption_time / len(captions)
+            caption_duration = min(2.0, time_per_caption_slot * 0.7)  # 70% of slot for caption
+            
         current_time = start_offset
         
         for i, caption in enumerate(captions):
             redistributed_caption = caption.copy()
             
-            # Calculate start and end times
-            start_time = current_time
-            end_time = start_time + avg_caption_duration
-            
-            # Ensure we don't exceed video duration
-            if end_time > video_duration - 1.0:
-                end_time = video_duration - 0.5
-                start_time = max(0, end_time - avg_caption_duration)
-            
-            redistributed_caption['start_time'] = self.seconds_to_ass_time(start_time)
-            redistributed_caption['end_time'] = self.seconds_to_ass_time(end_time)
+            if len(captions) == 1:
+                # Single caption case
+                redistributed_caption['start_time'] = self.seconds_to_ass_time(start_time)
+                redistributed_caption['end_time'] = self.seconds_to_ass_time(end_time)
+            else:
+                # Multiple captions case - distribute evenly
+                slot_start = start_offset + (i * time_per_caption_slot)
+                caption_start = slot_start + (time_per_caption_slot - caption_duration) / 2
+                caption_end = caption_start + caption_duration
+                
+                # Ensure we don't exceed video bounds
+                if caption_end > video_duration - 1.0:
+                    caption_end = video_duration - 0.5
+                    caption_start = max(0, caption_end - caption_duration)
+                
+                redistributed_caption['start_time'] = self.seconds_to_ass_time(caption_start)
+                redistributed_caption['end_time'] = self.seconds_to_ass_time(caption_end)
             
             redistributed_captions.append(redistributed_caption)
             
-            # Move to next caption position
-            current_time = end_time + gap_between_captions
-            
-            print(f"   Caption {i+1}: {redistributed_caption['start_time']} → {redistributed_caption['end_time']}: \"{caption.get('text', '')[:20]}...\"")
+            start_time_display = redistributed_caption['start_time']
+            end_time_display = redistributed_caption['end_time']
+            text_preview = caption.get('text', '')[:20] + '...' if len(caption.get('text', '')) > 20 else caption.get('text', '')
+            print(f"   Caption {i+1}: {start_time_display} → {end_time_display}: \"{text_preview}\"")
         
         final_span = self.calculate_caption_span(redistributed_captions)
-        print(f"✅ Redistributed captions now span {final_span:.1f} seconds ({final_span/video_duration*100:.1f}% of video)")
+        coverage = (final_span / video_duration * 100) if video_duration > 0 else 0
+        print(f"✅ Redistributed captions now span {final_span:.1f} seconds ({coverage:.1f}% of video)")
         
         return redistributed_captions
     
