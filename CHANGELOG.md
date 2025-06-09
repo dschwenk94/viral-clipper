@@ -5,6 +5,44 @@ All notable changes to the Clippy project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-06-06
+
+### 🎉 Major Release - Multi-User Support
+
+This release transforms Clippy into a multi-user application with individual authentication and isolated workspaces.
+
+### Added
+- **Multi-User Authentication**: Google OAuth integration for individual user accounts
+- **PostgreSQL Database**: User management, session tracking, and upload history
+- **Per-User YouTube Integration**: Each user connects their own YouTube account
+- **Upload History**: Track all uploads per user with timestamps and metadata
+- **Secure Session Management**: 7-day sessions with encrypted tokens
+- **User Isolation**: Complete separation of jobs, clips, and uploads between users
+- **Beta Testing System**: Controlled access during development phase
+
+### Changed
+- Default app is now `app_multiuser.py` (single-user version preserved as `app.py`)
+- OAuth scopes expanded to include user profile information
+- WebSocket rooms now user-specific for isolated real-time updates
+- File structure reorganized with new `auth/` and `database/` modules
+
+### Security
+- All OAuth tokens encrypted using Fernet symmetric encryption
+- Database credentials stored in environment variables
+- Session tokens use cryptographically secure random generation
+- CSRF protection in OAuth flow
+
+### Technical Details
+- New dependencies: `psycopg2-binary`, `python-dotenv`
+- Database schema: `users`, `upload_history`, `user_sessions` tables
+- Migration system for database updates
+- Comprehensive error handling for OAuth flows
+
+### Notes
+- Beta access required (contact @dschwenk94 for access)
+- PostgreSQL required for multi-user mode
+- Single-user version remains available for simpler deployments
+
 ## [1.0.0] - 2025-06-01
 
 ### 🎉 Major Release - Full Implementation

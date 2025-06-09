@@ -95,7 +95,138 @@
                     <div class="step" id="step-analyze">🎯 Analyzing optimal moments</div>
                     <div class="step" id="step-speakers">👥 Detecting speakers</div>
                     <div class="step" id="step-captions">📝 Generating captions</div>
-                    <div class="step" id="step-video">🎥 Creating final video</div>
+                    <div class="step" id="step-video">🎬 Creating final video</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 2: Edit Clip -->
+        <div id="screen2" class="screen">
+            <div class="edit-container">
+                <h2>✂️ Edit Your Viral Clip</h2>
+                
+                <div class="edit-layout">
+                    <!-- Video Player -->
+                    <div class="video-section">
+                        <video id="clip-video" controls class="clip-player">
+                            <source id="video-source" src="" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        
+                        <div class="video-info" id="video-info">
+                            <div class="detection-info">
+                                <h4>🎯 Detection Results:</h4>
+                                <div id="detection-details"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Captions Editor -->
+                    <div class="captions-section">
+                        <h3>📝 Edit Captions</h3>
+                        <div class="captions-help">
+                            <div class="help-item">📝 <strong>Edit Text:</strong> Click in any text box to edit caption content</div>
+                            <div class="help-item">👥 <strong>Change Speaker:</strong> Use dropdown to reassign captions to correct speaker</div>
+                            <div class="help-item">🎨 <strong>Colors:</strong> Speaker changes will update caption colors in video</div>
+                        </div>
+                        
+                        <div id="captions-editor" class="captions-editor">
+                            <!-- Captions will be loaded here -->
+                        </div>
+                        
+                        <div class="caption-actions">
+                            <button id="back-to-input-btn" class="action-btn secondary">
+                                ⬅️ Back to Input
+                            </button>
+                            <button id="update-captions-btn" class="action-btn">
+                                💾 Update Captions
+                            </button>
+                            <button id="continue-to-upload-btn" class="action-btn primary">
+                                ➡️ Continue to Upload
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen 3: Upload to YouTube -->
+        <div id="screen3" class="screen">
+            <div class="upload-container">
+                <h2>📤 Upload to YouTube</h2>
+                
+                <!-- OAuth Status Section -->
+                <div class="oauth-section">
+                    <h3>🔐 YouTube Authentication</h3>
+                    <div id="oauth-status" class="oauth-status">
+                        <div class="status-indicator">
+                            <span id="oauth-indicator" class="indicator">🔄</span>
+                            <span id="oauth-message">Checking authentication status...</span>
+                        </div>
+                        <div class="oauth-actions">
+                            <button id="authenticate-btn" class="action-btn oauth-btn" style="display: none;">
+                                🔑 Authenticate with YouTube
+                            </button>
+                            <button id="test-upload-btn" class="action-btn secondary oauth-btn" style="display: none;">
+                                🧪 Test Connection
+                            </button>
+                            <button id="revoke-auth-btn" class="action-btn secondary oauth-btn" style="display: none;">
+                                🚫 Revoke Access
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="upload-form" id="upload-form-section">
+                    <div class="input-group">
+                        <label for="video-title">YouTube Short Title</label>
+                        <input type="text" id="video-title" name="title" 
+                               placeholder="Your viral clip title..." 
+                               maxlength="100" required>
+                        <div class="input-help">Max 100 characters</div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="video-description">YouTube Short Description</label>
+                        <textarea id="video-description" name="description" 
+                                  placeholder="Description of your viral clip...&#10;&#10;#Shorts #Viral #Clips" 
+                                  rows="6" maxlength="5000"></textarea>
+                        <div class="input-help">Max 5000 characters - include hashtags for better reach</div>
+                    </div>
+                    
+                    <div class="upload-options">
+                        <h4>📊 Upload Settings:</h4>
+                        <div class="option-group">
+                            <label class="radio-label">
+                                <input type="radio" name="privacy-status" value="private" checked>
+                                <span class="checkmark"></span>
+                                Private (only you can see it)
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="privacy-status" value="unlisted">
+                                <span class="checkmark"></span>
+                                Unlisted (only people with link can see it)
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="privacy-status" value="public">
+                                <span class="checkmark"></span>
+                                Public (everyone can see it)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="upload-actions">
+                        <button id="back-to-edit-btn" class="action-btn">
+                            ⬅️ Back to Edit
+                        </button>
+                        <button id="upload-btn" class="action-btn primary">
+                            🚀 Upload to YouTube
+                        </button>
+                    </div>
+                    
+                    <div id="upload-status" class="upload-status hidden">
+                        <!-- Upload progress will show here -->
+                    </div>
                 </div>
             </div>
         </div>

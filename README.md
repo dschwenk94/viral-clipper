@@ -2,6 +2,8 @@
 
 Transform long-form YouTube videos into viral shorts with AI-powered speaker detection, dynamic captions, and seamless YouTube upload integration.
 
+> **🚀 New: Multi-User Support!** Clippy now supports multiple users with individual Google accounts and YouTube channels. See [Multi-User Setup Guide](MULTIUSER_README.md) for details.
+
 ## ✨ Features
 
 ### Core Functionality
@@ -52,11 +54,19 @@ Transform long-form YouTube videos into viral shorts with AI-powered speaker det
 
 ### Running the App
 
+**Multi-User Version (Default - Recommended):**
+```bash
+python app_multiuser.py
+```
+
+**Single-User Version (Legacy):**
 ```bash
 python app.py
 ```
 
 Access the web interface at: `http://localhost:5000`
+
+> **Note:** The multi-user version requires PostgreSQL and Google OAuth setup. To become a beta tester for the multi-user version, please reach out to [@dschwenk94](https://github.com/dschwenk94).
 
 ## 📖 Usage
 

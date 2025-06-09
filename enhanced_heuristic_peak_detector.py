@@ -58,7 +58,7 @@ class EnhancedHeuristicPeakDetector:
             
             # Reactions
             'really?', 'seriously?', 'are you serious?', 'no way',
-            'you\\'re kidding', 'get out', 'shut up',
+            "you're kidding", 'get out', 'shut up',
             
             # Story beginnings
             'so i was', 'there was this', 'one time', 'i remember',

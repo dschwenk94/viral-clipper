@@ -18,7 +18,7 @@ from dataclasses import dataclass
 # Import our systems
 from viral_clipper_complete import ViralClipGenerator as BaseClipGenerator, Speaker
 from enhanced_heuristic_peak_detector import EnhancedHeuristicPeakDetector, ViralMoment
-from ass_caption_update_system_v2 import ASSCaptionUpdateSystemV2 as ASSCaptionUpdateSystem
+from ass_caption_update_system_v6 import ASSCaptionUpdateSystemV6 as ASSCaptionUpdateSystem
 
 @dataclass
 class PhraseSegment:
@@ -90,13 +90,13 @@ class AutoPeakViralClipper(BaseClipGenerator):
         
         # Step 2: Find optimal moment (or use manual override)
         if manual_start_time is not None:
-            print(f"\n🎯 Step 2: Using manual start time: {manual_start_time}s")
+            print(f"\\n🎯 Step 2: Using manual start time: {manual_start_time}s")
             optimal_moment = None
             start_time = manual_start_time
             confidence = 0.5  # Default confidence for manual selection
             
         else:
-            print("\n🎯 Step 2: Auto-detecting optimal viral moment...")
+            print("\\n🎯 Step 2: Auto-detecting optimal viral moment...")
             optimal_moment = self.peak_detector.find_optimal_viral_moment(video_path, duration)
             
             if not optimal_moment:
@@ -107,18 +107,18 @@ class AutoPeakViralClipper(BaseClipGenerator):
                 start_time = optimal_moment.timestamp
                 confidence = optimal_moment.confidence
                 
-                print("\n🎉 OPTIMAL MOMENT DETECTED!")
+                print("\\n🎉 OPTIMAL MOMENT DETECTED!")
                 print(f"   ⏰ Best timestamp: {start_time:.1f}s ({start_time/60:.1f} min)")
                 print(f"   🎯 Confidence: {confidence:.2f}")
                 print(f"   💡 Reason: {optimal_moment.reason}")
         
         # Step 3: Detect speakers for video cropping
-        print("\n👥 Step 3: Detecting speakers for video cropping...")
+        print("\\n👥 Step 3: Detecting speakers for video cropping...")
         video_speakers = self.detect_speakers_from_segment(video_path, start_time, duration)
         print(f"✅ Video speakers detected: {len(video_speakers)}")
         
         # Step 4: Get phrase-level transcription
-        print("\n🎤 Step 4: Getting phrase-level transcription...")
+        print("\\n🎤 Step 4: Getting phrase-level transcription...")
         phrase_segments = self.get_phrase_level_transcription_debug(video_path, start_time, duration)
         
         if not phrase_segments:
@@ -128,17 +128,17 @@ class AutoPeakViralClipper(BaseClipGenerator):
         print(f"✅ Phrase segments created: {len(phrase_segments)}")
         
         # Step 5: Create speaker profiles for captions
-        print("\n🔍 Step 5: Creating speaker profiles...")
+        print("\\n🔍 Step 5: Creating speaker profiles...")
         caption_speakers = self.create_caption_speaker_profiles_debug(phrase_segments, video_speakers)
         print(f"✅ Caption speakers created: {len(caption_speakers)}")
         
         # Step 6: Assign phrases to speakers
-        print("\n🎯 Step 6: Assigning phrases to speakers...")
+        print("\\n🎯 Step 6: Assigning phrases to speakers...")
         assigned_phrases = self.assign_phrases_to_speakers_debug(phrase_segments, caption_speakers)
         print(f"✅ Phrases assigned: {len(assigned_phrases)}")
         
         # Step 7: Create speaker switching video
-        print("\n🎬 Step 7: Creating speaker switching video...")
+        print("\\n🎬 Step 7: Creating speaker switching video...")
         clip_filename = f"auto_peak_clip_{video_id}_{int(start_time)}s.mp4"
         clip_path = os.path.join('clips', clip_filename)
         temp_video_path = clip_path.replace('.mp4', '_temp_switching.mp4')
@@ -160,7 +160,7 @@ class AutoPeakViralClipper(BaseClipGenerator):
         print(f"✅ Base video created: {os.path.basename(temp_video_path)}")
         
         # Step 8: Generate phrase-by-phrase captions
-        print("\n📝 Step 8: Generating phrase-by-phrase captions...")
+        print("\\n📝 Step 8: Generating phrase-by-phrase captions...")
         subtitle_path = clip_path.replace('.mp4', '_captions.ass')
         
         subtitle_success = self.generate_fixed_phrase_by_phrase_ass_file(
@@ -176,7 +176,7 @@ class AutoPeakViralClipper(BaseClipGenerator):
             print(f"✅ Subtitle file created: {os.path.basename(subtitle_path)}")
             
             # Step 9: Burn in captions
-            print("\n🔥 Step 9: Burning in captions...")
+            print("\\n🔥 Step 9: Burning in captions with FIXED system...")
             caption_success = self.burn_captions_into_video_debug(temp_video_path, subtitle_path, clip_path)
             
             if not caption_success:
@@ -202,7 +202,7 @@ class AutoPeakViralClipper(BaseClipGenerator):
         if os.path.exists(clip_path):
             file_size = os.path.getsize(clip_path) / (1024*1024)
             
-            print("\n🎉 AUTO-PEAK VIRAL CLIP CREATED!")
+            print("\\n🎉 AUTO-PEAK VIRAL CLIP CREATED!")
             print(f"✅ Output: {clip_path} ({file_size:.1f} MB)")
             print(f"📊 AUTO-PEAK STATS:")
             print(f"   ⏰ Optimal timestamp: {start_time:.1f}s ({start_time/60:.1f} min)")
@@ -505,12 +505,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     def update_captions_ass(self, subtitle_path: str, updated_captions: List[Dict], duration: float = 30.0) -> bool:
         """
         🆕 Update ASS captions with edited text and speaker assignments
-        Maintains proper speaker colors in pop-out effects
+        Maintains proper speaker colors in pop-out effects and video duration
         """
         try:
-            print("🔄 Updating ASS captions...")
+            print(f"🔄 Updating ASS captions for {duration:.1f}s video...")
             return self.caption_updater.update_ass_file_with_edits(
-                subtitle_path, updated_captions
+                subtitle_path, updated_captions, None, duration
             )
         except Exception as e:
             print(f"❌ Error updating ASS captions: {e}")
@@ -563,7 +563,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         formatted_text = text
         for word in viral_keywords:
             if word.lower() in text.lower():
-                viral_format = "{\\c&H0000D7FF&\\fs26}" + word.upper() + "{\\r}"
+                viral_format = "{\\\\c&H0000D7FF&\\\\fs26}" + word.upper() + "{\\\\r}"
                 
                 import re
                 pattern = re.compile(re.escape(word), re.IGNORECASE)
@@ -646,7 +646,7 @@ def main():
     )
     
     if clip_data and clip_data.get('captions_added'):
-        print("\n🎉 AUTO-PEAK SUCCESS!")
+        print("\\n🎉 AUTO-PEAK SUCCESS!")
         print(f"   🎬 Path: {clip_data['path']}")
         print(f"   ⏰ Optimal moment: {clip_data['optimal_timestamp']:.1f}s")
         print(f"   🎯 Confidence: {clip_data['detection_confidence']:.2f}")
@@ -657,14 +657,14 @@ def main():
         print("   ✅ CAPTIONS AND SPEAKER SWITCHING WORKING!")
         
     elif clip_data:
-        print("\n⚠️  VIDEO CREATED BUT CAPTIONS FAILED")
+        print("\\n⚠️  VIDEO CREATED BUT CAPTIONS FAILED")
         print(f"   🎬 Path: {clip_data['path']}")
         print(f"   ⏰ Optimal moment: {clip_data['optimal_timestamp']:.1f}s")
         
     else:
         print("❌ Auto-peak clip generation failed")
     
-    print("\n🎯 INTEGRATION COMPLETE!")
+    print("\\n🎯 INTEGRATION COMPLETE!")
     print("🚀 You now have:")
     print("   ✅ Automatic optimal moment detection")
     print("   ✅ Speaker switching video")

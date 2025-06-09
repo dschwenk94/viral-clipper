@@ -99,10 +99,10 @@ class SRTViralCaptionSystem:
                 speaker_prefix = f"[{caption['speaker']}] " if len(set(cap['speaker'] for cap in timed_captions)) > 1 else ""
                 
                 # SRT format: index, timing, text, blank line
-                srt_content += f"{caption['index']}\n"
-                srt_content += f"{start_time} --> {end_time}\n"
-                srt_content += f"{speaker_prefix}{text}\n"
-                srt_content += "\n"
+                srt_content += f"{caption['index']}\\n"
+                srt_content += f"{start_time} --> {end_time}\\n"
+                srt_content += f"{speaker_prefix}{text}\\n"
+                srt_content += "\\n"
             
             # Write file
             with open(output_path, 'w', encoding='utf-8') as f:
@@ -133,15 +133,15 @@ class SRTViralCaptionSystem:
                 content = f.read()
             
             # Parse SRT format
-            subtitle_blocks = content.strip().split('\n\n')
+            subtitle_blocks = content.strip().split('\\n\\n')
             
             for i, block in enumerate(subtitle_blocks):
-                lines = block.strip().split('\n')
+                lines = block.strip().split('\\n')
                 if len(lines) >= 3:
                     try:
                         index = int(lines[0])
                         timing = lines[1]
-                        text = '\n'.join(lines[2:])
+                        text = '\\n'.join(lines[2:])
                         
                         # Extract speaker if present
                         speaker = 'Speaker 1'
@@ -217,19 +217,19 @@ def test_srt_system():
     success = caption_system.generate_srt_file(test_captions, test_output, 30.0)
     
     if success:
-        print(f"\n✅ SRT test successful! Generated: {test_output}")
+        print(f"\\n✅ SRT test successful! Generated: {test_output}")
         
         # Show what the SRT file looks like
-        print("\n📄 SRT file preview:")
+        print("\\n📄 SRT file preview:")
         with open(test_output, 'r', encoding='utf-8') as f:
             content = f.read()
             print(content[:300] + "..." if len(content) > 300 else content)
         
-        print("\n🎯 SRT caption system ready!")
+        print("\\n🎯 SRT caption system ready!")
         print("📝 This should display as clean captions, not raw code!")
         return True
     else:
-        print("\n❌ SRT test failed")
+        print("\\n❌ SRT test failed")
         return False
 
 def main():
@@ -239,14 +239,14 @@ def main():
     
     test_srt_system()
     
-    print("\n🔧 SRT ADVANTAGES:")
+    print("\\n🔧 SRT ADVANTAGES:")
     print("✅ More reliable than ASS format")
     print("✅ Simpler format, less likely to break")
     print("✅ Better FFmpeg compatibility")
     print("✅ Clean text display")
     print("✅ No complex formatting codes")
     
-    print("\n📝 Next: Integrate SRT system into the clipper!")
+    print("\\n📝 Next: Integrate SRT system into the clipper!")
 
 if __name__ == "__main__":
     main()

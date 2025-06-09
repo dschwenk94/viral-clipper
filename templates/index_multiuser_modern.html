@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clippy - AI-Powered Viral Clip Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style_modern.css') }}?v=2.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <!-- Paperclip Logo -->
+                <div class="paperclip-logo">
+                    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M32 18.5C32 25.404 26.404 31 19.5 31C12.596 31 7 25.404 7 18.5C7 11.596 12.596 6 19.5 6C23.09 6 26 8.91 26 12.5V22.5C26 24.433 24.433 26 22.5 26C20.567 26 19 24.433 19 22.5V13" 
+                            stroke="url(#clipGradient)" 
+                            stroke-width="3" 
+                            stroke-linecap="round" 
+                            stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="clipGradient" x1="7" y1="6" x2="32" y2="31" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#6366f1"/>
+                                <stop offset="1" stop-color="#8b5cf6"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="app-title">Clippy</h1>
+                    <p class="app-tagline">AI-Powered Viral Clip Generator</p>
+                </div>
+            </div>
+            <div class="user-section" id="user-info">
+                <!-- User info injected by JS -->
+            </div>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <!-- Main App -->
+        <div id="main-app">
+            <!-- Screen 1: Input Form -->
+            <div id="screen1" class="screen active">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">Create Your Viral Clip</h2>
+                        <p class="card-description">Enter a YouTube URL and let AI find the perfect moment</p>
+                    </div>
+                    
+                    <form id="clipForm">
+                        <!-- YouTube URL Input -->
+                        <div class="form-group">
+                            <label class="form-label" for="youtube-url">YouTube Video URL</label>
+                            <input type="url" 
+                                   id="youtube-url" 
+                                   name="url" 
+                                   class="form-input" 
+                                   placeholder="https://www.youtube.com/watch?v=..." 
+                                   required>
+                            <div class="form-hint">Paste any YouTube video URL to get started</div>
+                        </div>
+
+                        <!-- Time Selection Section - Prioritized -->
+                        <div class="time-input-section">
+                            <div class="time-input-header">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <h3 class="time-input-title">Manual Time Selection (Optional)</h3>
+                            </div>
+                            
+                            <div class="time-input-grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="start-time">Start Time</label>
+                                    <input type="text" 
+                                           id="start-time" 
+                                           name="start_time" 
+                                           class="form-input" 
+                                           placeholder="2:30 or 150">
+                                    <div class="form-hint">Format: MM:SS or seconds</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label" for="end-time">End Time</label>
+                                    <input type="text" 
+                                           id="end-time" 
+                                           name="end_time" 
+                                           class="form-input" 
+                                           placeholder="3:00 or 180">
+                                    <div class="form-hint">Leave blank to use duration</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Clip Duration -->
+                        <div class="form-group">
+                            <label class="form-label" for="duration">Clip Duration (seconds)</label>
+                            <input type="number" 
+                                   id="duration" 
+                                   name="duration" 
+                                   class="form-input" 
+                                   value="30" 
+                                   min="10" 
+                                   max="60" 
+                                   required>
+                            <div class="form-hint">Recommended: 30-45 seconds for maximum engagement</div>
+                        </div>
+
+                        <!-- AI Peak Detection Info -->
+                        <div class="peak-detection-info">
+                            <div class="peak-detection-header">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                </svg>
+                                <h4 class="peak-detection-title">AI Auto-Detection (When no time specified)</h4>
+                            </div>
+                            <div class="peak-detection-features">
+                                <div class="feature-item">
+                                    <svg class="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    <span>Audio energy analysis</span>
+                                </div>
+                                <div class="feature-item">
+                                    <svg class="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    <span>Speech pattern detection</span>
+                                </div>
+                                <div class="feature-item">
+                                    <svg class="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    <span>Engagement optimization</span>
+                                </div>
+                                <div class="feature-item">
+                                    <svg class="feature-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                    <span>Multi-speaker support</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Generate Button -->
+                        <button type="submit" class="btn btn-primary btn-lg" style="width: 100%; margin-top: 2rem;">
+                            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            Generate Viral Clip
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Platform Connections -->
+                <div class="platform-connections" id="platform-connections">
+                    <!-- Platform connection cards will be injected here -->
+                </div>
+                
+                <!-- Upload History -->
+                <div id="upload-history" style="margin-top: 2rem;">
+                    <!-- Upload history will be injected here -->
+                </div>
+            </div>
+
+            <!-- Progress Screen -->
+            <div id="progress-screen" class="screen">
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <h2 class="progress-title">Creating Your Viral Clip</h2>
+                        <p class="progress-subtitle">AI is analyzing your video...</p>
+                    </div>
+                    
+                    <!-- Circular Progress -->
+                    <div class="circular-progress">
+                        <svg viewBox="0 0 200 200">
+                            <defs>
+                                <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                            <circle cx="100" cy="100" r="90" class="progress-bg"></circle>
+                            <circle cx="100" cy="100" r="90" class="progress-fill" 
+                                    stroke-dasharray="565.48" 
+                                    stroke-dashoffset="565.48"
+                                    id="progress-circle"></circle>
+                        </svg>
+                        <div class="progress-text" id="progress-percentage">0%</div>
+                    </div>
+                    
+                    <p class="progress-message" id="progress-message">Initializing...</p>
+                    
+                    <!-- Progress Steps -->
+                    <div class="progress-steps">
+                        <div class="progress-step" id="step-download">
+                            <div class="step-icon">
+                                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                                </svg>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-title">Downloading Video</div>
+                                <div class="step-description">Fetching video from YouTube</div>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-step" id="step-analyze">
+                            <div class="step-icon">
+                                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                </svg>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-title">Analyzing Content</div>
+                                <div class="step-description">Finding optimal moments</div>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-step" id="step-speakers">
+                            <div class="step-icon">
+                                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                </svg>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-title">Detecting Speakers</div>
+                                <div class="step-description">Identifying voices</div>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-step" id="step-captions">
+                            <div class="step-icon">
+                                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+                                </svg>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-title">Generating Captions</div>
+                                <div class="step-description">Creating subtitles</div>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-step" id="step-video">
+                            <div class="step-icon">
+                                <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-title">Creating Final Video</div>
+                                <div class="step-description">Rendering your clip</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen 2: Edit Clip -->
+            <div id="screen2" class="screen">
+                <div class="edit-container">
+                    <!-- Video Panel -->
+                    <div class="video-panel">
+                        <div class="video-wrapper">
+                            <video id="clip-video" controls class="video-player">
+                                <source id="video-source" src="" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                        </div>
+                        
+                        <div class="video-info-card">
+                            <div class="video-info-grid" id="detection-details">
+                                <!-- Video info will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Caption Editor Panel -->
+                    <div class="caption-panel">
+                        <div class="caption-header">
+                            <h3 class="caption-title">Edit Captions</h3>
+                            <p class="caption-description">Click to edit text or change speakers</p>
+                        </div>
+                        
+                        <div class="caption-editor" id="captions-editor">
+                            <!-- Captions will be loaded here -->
+                        </div>
+                        
+                        <div class="caption-actions">
+                            <button id="back-to-input-btn" class="btn btn-ghost">
+                                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                                </svg>
+                                Back
+                            </button>
+                            <button id="update-captions-btn" class="btn btn-secondary">
+                                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Update Video
+                            </button>
+                            <button id="continue-to-upload-btn" class="btn btn-primary">
+                                Continue
+                                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen 3: Upload -->
+            <div id="screen3" class="screen">
+                <div class="upload-container">
+                    <!-- Platform Selector -->
+                    <div class="platform-selector-card">
+                        <h2 class="card-title">Choose Upload Platform</h2>
+                        <div class="platform-tabs">
+                            <div class="platform-tab active" data-platform="youtube">
+                                <div class="platform-icon">
+                                    <svg viewBox="0 0 48 48" fill="none">
+                                        <rect width="48" height="48" rx="12" fill="#FF0000"/>
+                                        <path d="M20 16.5V31.5L32 24L20 16.5Z" fill="white"/>
+                                    </svg>
+                                </div>
+                                <div class="platform-name">YouTube</div>
+                            </div>
+                            <div class="platform-tab" data-platform="tiktok" id="tiktok-tab" style="display: none;">
+                                <div class="platform-icon">
+                                    <svg viewBox="0 0 48 48" fill="none">
+                                        <rect width="48" height="48" rx="12" fill="#000000"/>
+                                        <path d="M34.145 14.695c-2.082-1.376-3.391-3.743-3.525-6.445h-5.506v21.539c-.049 2.365-1.974 4.275-4.351 4.275-2.408 0-4.361-1.951-4.361-4.359s1.953-4.359 4.361-4.359c.47 0 .921.075 1.345.213v-5.643c-.438-.061-.887-.093-1.345-.093-5.601 0-10.142 4.541-10.142 10.142S15.162 40.057 20.763 40.057c5.601 0 10.142-4.541 10.142-10.142V19.371c2.159 1.547 4.784 2.457 7.619 2.457v-5.564c-1.586 0-3.065-.459-4.309-1.249z" fill="white"/>
+                                    </svg>
+                                </div>
+                                <div class="platform-name">TikTok</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Upload Form -->
+                    <div class="upload-form-card" id="platform-upload-form">
+                        <!-- Dynamic form content based on platform -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Modal -->
+        <div id="error-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>Error</h3>
+                <p id="error-message"></p>
+                <button id="close-error-btn" class="btn btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script_multiuser_tiktok.js') }}"></script>
+</body>
+</html>

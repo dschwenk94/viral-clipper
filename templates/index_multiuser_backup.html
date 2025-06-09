@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 Clippy - AI-Powered Viral Clip Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    <style>
+        /* Additional styles for multi-user features */
+        .auth-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .auth-logo {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+        
+        .google-signin-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: #4285f4;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+        
+        .google-signin-btn:hover {
+            background: #357ae8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+        }
+        
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 25px;
+        }
+        
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+        }
+        
+        .user-avatar-placeholder {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        
+        .user-name {
+            color: white;
+            font-weight: 500;
+        }
+        
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 6px 12px;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .upload-history {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+        
+        .upload-history h4 {
+            margin-bottom: 15px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .upload-history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .upload-history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-history-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .upload-link {
+            color: #4fc3f7;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .upload-link:hover {
+            text-decoration: underline;
+        }
+        
+        .upload-date {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+        }
+        
+        .success-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #4caf50;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            animation: slideIn 0.3s ease;
+            z-index: 1000;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with User Info -->
+        <header class="header">
+            <div class="header-content">
+                <div>
+                    <h1>🎯 Clippy</h1>
+                    <p>AI-Powered Viral Clip Generator</p>
+                </div>
+                <div id="user-info"></div>
+            </div>
+        </header>
+
+        <!-- Authentication Section -->
+        <div id="auth-section" class="auth-container" style="display: none;">
+            <div class="auth-logo">🎯</div>
+            <h2>Welcome to Clippy</h2>
+            <p>Sign in with your Google account to start creating viral clips</p>
+            
+            <button id="google-signin-btn" class="google-signin-btn">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17.64 9.20454C17.64 8.56636 17.5827 7.95272 17.4764 7.36363H9V10.845H13.8436C13.635 11.97 13.0009 12.9231 12.0477 13.5613V15.8195H14.9564C16.6582 14.2527 17.64 11.9454 17.64 9.20454Z" fill="white"/>
+                    <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 9 14.4204C6.65591 14.4204 4.67182 12.8372 3.96409 10.71H0.957275V13.0418C2.43818 15.9831 5.48182 18 9 18Z" fill="white"/>
+                    <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="white"/>
+                    <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="white"/>
+                </svg>
+                Sign in with Google
+            </button>
+            
+            <p style="margin-top: 30px; font-size: 14px; color: #666;">
+                By signing in, you agree to use Clippy responsibly and respect content creators' rights.
+            </p>
+        </div>
+
+        <!-- Main App (hidden until authenticated) -->
+        <div id="main-app" style="display: none;">
+            <!-- Screen 1: Input Form -->
+            <div id="screen1" class="screen active">
+                <div class="form-container">
+                    <h2>📹 Create Viral Clip</h2>
+                    
+                    <form id="clipForm" class="clip-form">
+                        <!-- YouTube URL -->
+                        <div class="input-group">
+                            <label for="youtube-url">YouTube Video URL</label>
+                            <input type="url" id="youtube-url" name="url" 
+                                   placeholder="https://www.youtube.com/watch?v=..." 
+                                   required>
+                            <div class="input-help">Paste the full YouTube video URL</div>
+                        </div>
+
+                        <!-- Clip Duration -->
+                        <div class="input-group">
+                            <label for="duration">Clip Duration (seconds)</label>
+                            <input type="number" id="duration" name="duration" 
+                                   value="30" min="10" max="60" required>
+                            <div class="input-help">Length of final clip (10-60 seconds)</div>
+                        </div>
+
+                        <!-- Manual Time Selection -->
+                        <div class="time-selection">
+                            <h3>⏰ Time Selection</h3>
+                            <div class="time-inputs">
+                                <div class="input-group">
+                                    <label for="start-time">Start Time (MM:SS or seconds)</label>
+                                    <input type="text" id="start-time" name="start_time" 
+                                           placeholder="5:30 or 330">
+                                    <div class="input-help">Optional - leave blank for auto-detection</div>
+                                </div>
+                                
+                                <div class="input-group">
+                                    <label for="end-time">End Time (MM:SS or seconds)</label>
+                                    <input type="text" id="end-time" name="end_time" 
+                                           placeholder="6:00 or 360">
+                                    <div class="input-help">Optional - overrides duration if set</div>
+                                </div>
+                            </div>
+                            
+                            <div class="auto-detection-info">
+                                <h4>🤖 Auto-Detection Features:</h4>
+                                <ul>
+                                    <li>🎵 Audio energy analysis</li>
+                                    <li>🎤 Speech pattern detection</li>
+                                    <li>📍 Optimal timing heuristics</li>
+                                    <li>🔄 Multi-signal confidence scoring</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Generate Button -->
+                        <button type="submit" class="generate-btn">
+                            🚀 Generate Viral Clip
+                        </button>
+                    </form>
+                    
+                    <!-- Upload History -->
+                    <div id="upload-history" class="upload-history"></div>
+                </div>
+            </div>
+
+            <!-- Progress Screen -->
+            <div id="progress-screen" class="screen">
+                <div class="progress-container">
+                    <h2>🔄 Generating Your Viral Clip</h2>
+                    
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    
+                    <div class="progress-info">
+                        <div class="progress-percentage" id="progress-percentage">0%</div>
+                        <div class="progress-message" id="progress-message">Initializing...</div>
+                    </div>
+                    
+                    <div class="progress-steps">
+                        <div class="step" id="step-download">📥 Downloading video</div>
+                        <div class="step" id="step-analyze">🎯 Analyzing optimal moments</div>
+                        <div class="step" id="step-speakers">👥 Detecting speakers</div>
+                        <div class="step" id="step-captions">📝 Generating captions</div>
+                        <div class="step" id="step-video">🎬 Creating final video</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen 2: Edit Clip -->
+            <div id="screen2" class="screen">
+                <div class="edit-container">
+                    <h2>✂️ Edit Your Viral Clip</h2>
+                    
+                    <div class="edit-layout">
+                        <!-- Video Player -->
+                        <div class="video-section">
+                            <video id="clip-video" controls class="clip-player">
+                                <source id="video-source" src="" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            
+                            <div class="video-info" id="video-info">
+                                <div id="detection-details"></div>
+                            </div>
+                        </div>
+
+                        <!-- Captions Editor -->
+                        <div class="captions-section">
+                            <h3>📝 Edit Captions</h3>
+                            <div class="captions-help">
+                                <div class="help-item">📝 <strong>Edit Text:</strong> Click in any text box to edit caption content</div>
+                                <div class="help-item">👥 <strong>Change Speaker:</strong> Use dropdown to reassign captions to correct speaker</div>
+                                <div class="help-item">🎨 <strong>Colors:</strong> Speaker changes will update caption colors in video</div>
+                            </div>
+                            
+                            <div id="captions-editor" class="captions-editor">
+                                <!-- Captions will be loaded here -->
+                            </div>
+                            
+                            <div class="caption-actions">
+                                <button id="back-to-input-btn" class="action-btn secondary">
+                                    ⬅️ Back to Input
+                                </button>
+                                <button id="update-captions-btn" class="action-btn">
+                                    💾 Update Captions
+                                </button>
+                                <button id="continue-to-upload-btn" class="action-btn primary">
+                                    ➡️ Continue to Upload
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen 3: Upload to YouTube -->
+            <div id="screen3" class="screen">
+                <div class="upload-container">
+                    <h2>📤 Upload to YouTube</h2>
+                    
+                    <div class="upload-form">
+                        <div class="input-group">
+                            <label for="video-title">YouTube Short Title</label>
+                            <input type="text" id="video-title" name="title" 
+                                   placeholder="Your viral clip title..." 
+                                   maxlength="100" required>
+                            <div class="input-help">Max 100 characters</div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="video-description">YouTube Short Description</label>
+                            <textarea id="video-description" name="description" 
+                                      placeholder="Description of your viral clip...&#10;&#10;#Shorts #Viral #Clips" 
+                                      rows="6" maxlength="5000"></textarea>
+                            <div class="input-help">Max 5000 characters - include hashtags for better reach</div>
+                        </div>
+                        
+                        <div class="upload-options">
+                            <h4>📊 Upload Settings:</h4>
+                            <div class="option-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="privacy-status" value="private" checked>
+                                    <span class="checkmark"></span>
+                                    Private (only you can see it)
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="privacy-status" value="unlisted">
+                                    <span class="checkmark"></span>
+                                    Unlisted (only people with link can see it)
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="privacy-status" value="public">
+                                    <span class="checkmark"></span>
+                                    Public (everyone can see it)
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="upload-actions">
+                            <button id="back-to-edit-btn" class="action-btn">
+                                ⬅️ Back to Edit
+                            </button>
+                            <button id="upload-btn" class="action-btn primary">
+                                🚀 Upload to YouTube
+                            </button>
+                        </div>
+                        
+                        <div id="upload-status" class="upload-status">
+                            <!-- Upload progress will show here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Modal -->
+        <div id="error-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>❌ Error</h3>
+                <p id="error-message"></p>
+                <button id="close-error-btn" class="action-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script_multiuser_anonymous.js') }}"></script>
+</body>
+</html>

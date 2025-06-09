@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Clippy - AI-Powered Viral Clip Generator{% endblock %}</title>
+    <meta name="description" content="{% block description %}Create viral clips from YouTube videos using AI-powered detection. Generate engaging short-form content in seconds.{% endblock %}">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    
+    <!-- Base Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=1.0">
+    
+    <!-- Page Specific Styles -->
+    {% block styles %}{% endblock %}
+    
+    <!-- Socket.io for real-time updates -->
+    {% block socket %}{% endblock %}
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-content">
+            <a href="/" class="logo-section">
+                <!-- Paperclip Logo -->
+                <div class="paperclip-logo">
+                    <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M32 18.5C32 25.404 26.404 31 19.5 31C12.596 31 7 25.404 7 18.5C7 11.596 12.596 6 19.5 6C23.09 6 26 8.91 26 12.5V22.5C26 24.433 24.433 26 22.5 26C20.567 26 19 24.433 19 22.5V13" 
+                            stroke="url(#clipGradient)" 
+                            stroke-width="3" 
+                            stroke-linecap="round" 
+                            stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="clipGradient" x1="7" y1="6" x2="32" y2="31" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#6366f1"/>
+                                <stop offset="1" stop-color="#8b5cf6"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="app-title">Clippy</h1>
+                    <p class="app-tagline">AI-Powered Viral Clip Generator</p>
+                </div>
+            </a>
+            
+            <!-- Progress Indicator (if applicable) -->
+            {% block progress_indicator %}{% endblock %}
+            
+            <div class="user-section" id="user-info">
+                <!-- User info injected by JS -->
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="app-container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Error Modal (shared across pages) -->
+    <div id="error-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Error</h3>
+            <p id="error-message"></p>
+            <button id="close-error-btn" class="btn btn-primary">Close</button>
+        </div>
+    </div>
+
+    <!-- Base JavaScript -->
+    <script src="{{ url_for('static', filename='js/base.js') }}"></script>
+    
+    <!-- Page Specific Scripts -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>
