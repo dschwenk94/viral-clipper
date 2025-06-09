@@ -262,17 +262,6 @@
                     
                     <!-- Upload History -->
                     <div id="upload-history" class="upload-history"></div>
-                    
-                    <!-- Platform Connections -->
-                    <div id="platform-connections" class="platform-connections-section">
-                        <h3>Connected Platforms</h3>
-                        <div id="google-connection" class="platform-connection">
-                            <!-- Google/YouTube connection status -->
-                        </div>
-                        <div id="tiktok-connection" class="platform-connection">
-                            <!-- TikTok connection status -->
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -350,21 +339,9 @@
             <!-- Screen 3: Upload to YouTube -->
             <div id="screen3" class="screen">
                 <div class="upload-container">
-                    <h2>📤 Upload Your Clip</h2>
+                    <h2>📤 Upload to YouTube</h2>
                     
-                    <!-- Platform Selector -->
-                    <div class="upload-platform-selector">
-                        <label for="upload-platform">Choose Platform:</label>
-                        <select id="upload-platform" class="platform-select" onchange="viralClipperApp.handlePlatformChange(this.value)">
-                            <option value="youtube">YouTube</option>
-                            <!-- TikTok option added dynamically if connected -->
-                        </select>
-                    </div>
-                    
-                    <!-- Platform-specific upload form -->
-                    <div id="platform-upload-form">
-                        <!-- YouTube Upload Form (default) -->
-                        <div class="upload-form" id="youtube-upload-form">
+                    <div class="upload-form">
                         <div class="input-group">
                             <label for="video-title">YouTube Short Title</label>
                             <input type="text" id="video-title" name="title" 
@@ -414,8 +391,6 @@
                         <div id="upload-status" class="upload-status">
                             <!-- Upload progress will show here -->
                         </div>
-                        </div>
-                    </div>
                     </div>
                 </div>
             </div>
@@ -431,6 +406,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='script_multiuser_tiktok.js') }}"></script>
+    <script src="{{ url_for('static', filename='script_multiuser_anonymous.js') }}"></script>
 </body>
 </html>

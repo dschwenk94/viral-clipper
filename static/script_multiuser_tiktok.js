@@ -1,5 +1,423 @@
-// 🎯 Viral Clipper JavaScript - MULTI-USER VERSION WITH ANONYMOUS SUPPORT
+// 🎯 Viral Clipper JavaScript - MULTI-USER VERSION WITH TIKTOK INTEGRATION
 // Allows clip generation without authentication, prompts for auth only on upload
+
+class TikTokIntegration {
+    constructor(app) {
+        this.app = app;
+        this.isConnected = false;
+        this.currentUploadJob = null;
+    }
+    
+    async checkConnection() {
+        try {
+            const response = await fetch('/api/auth/platforms');
+            const data = await response.json();
+            
+            if (data.connected && data.connected.tiktok) {
+                this.isConnected = data.connected.tiktok.connected;
+                this.updateConnectionUI(data.connected.tiktok);
+            }
+            
+            return this.isConnected;
+        } catch (error) {
+            console.error('Failed to check TikTok connection:', error);
+            return false;
+        }
+    }
+    
+    updateConnectionUI(connectionInfo) {
+        const tiktokSection = document.getElementById('tiktok-connection');
+        if (!tiktokSection) return;
+        
+        if (this.isConnected) {
+            tiktokSection.innerHTML = `
+                <div class="platform-connected">
+                    <div class="platform-info">
+                        <span class="platform-icon">🎵</span>
+                        <span>TikTok: @${connectionInfo.username || 'Connected'}</span>
+                    </div>
+                    <button class="disconnect-btn" onclick="viralClipperApp.tiktokIntegration.disconnect()">
+                        Disconnect
+                    </button>
+                </div>
+            `;
+        } else {
+            tiktokSection.innerHTML = `
+                <div class="platform-disconnected">
+                    <div class="platform-info">
+                        <span class="platform-icon">🎵</span>
+                        <span>TikTok: Not connected</span>
+                    </div>
+                    <button class="connect-btn" onclick="viralClipperApp.tiktokIntegration.connect()">
+                        Connect TikTok
+                    </button>
+                </div>
+            `;
+        }
+    }
+    
+    async connect() {
+        try {
+            const response = await fetch('/api/auth/connect/tiktok');
+            const result = await response.json();
+            
+            if (result.authorization_url) {
+                // Open TikTok auth in new window
+                const authWindow = window.open(
+                    result.authorization_url,
+                    'TikTok Authorization',
+                    'width=500,height=700'
+                );
+                
+                // Check for completion
+                const checkInterval = setInterval(() => {
+                    if (authWindow.closed) {
+                        clearInterval(checkInterval);
+                        // Refresh connection status
+                        this.checkConnection();
+                        this.app.showSuccess('TikTok connection process completed');
+                    }
+                }, 1000);
+            } else {
+                this.app.showError('Failed to initiate TikTok connection');
+            }
+        } catch (error) {
+            console.error('TikTok connection error:', error);
+            this.app.showError('Failed to connect TikTok');
+        }
+    }
+    
+    async disconnect() {
+        if (!confirm('Are you sure you want to disconnect your TikTok account?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/auth/disconnect/tiktok', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.isConnected = false;
+                this.updateConnectionUI({});
+                this.app.showSuccess('TikTok account disconnected');
+            } else {
+                this.app.showError(result.error || 'Failed to disconnect TikTok');
+            }
+        } catch (error) {
+            console.error('TikTok disconnect error:', error);
+            this.app.showError('Failed to disconnect TikTok');
+        }
+    }
+    
+    showUploadOptions() {
+        // Add TikTok upload option to the upload screen
+        const platformSelector = document.getElementById('upload-platform');
+        if (!platformSelector) return;
+        
+        if (this.isConnected) {
+            // Add TikTok option if not already present
+            if (!platformSelector.querySelector('option[value="tiktok"]')) {
+                const option = document.createElement('option');
+                option.value = 'tiktok';
+                option.textContent = 'TikTok';
+                platformSelector.appendChild(option);
+            }
+        } else {
+            // Remove TikTok option if present
+            const tiktokOption = platformSelector.querySelector('option[value="tiktok"]');
+            if (tiktokOption) {
+                tiktokOption.remove();
+            }
+        }
+    }
+    
+    showTikTokUploadForm() {
+        const uploadForm = document.getElementById('platform-upload-form');
+        if (!uploadForm) return;
+        
+        uploadForm.innerHTML = `
+            <h3 class="card-title">Upload to TikTok</h3>
+            
+            <div class="form-group">
+                <label class="form-label" for="tiktok-title">Title *</label>
+                <div class="input-with-counter">
+                    <input type="text" 
+                           id="tiktok-title" 
+                           class="form-input" 
+                           placeholder="Enter video title (max 150 chars)" 
+                           maxlength="150" 
+                           required>
+                    <div class="char-counter">0 / 150</div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="tiktok-description">Description</label>
+                <div class="input-with-counter">
+                    <textarea id="tiktok-description" 
+                              class="form-input" 
+                              placeholder="Add description with #hashtags and @mentions" 
+                              rows="4" 
+                              maxlength="2200"></textarea>
+                    <div class="char-counter">0 / 2200</div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Privacy Settings</label>
+                <div class="option-group">
+                    <div class="option-item">
+                        <input type="radio" id="tiktok-public" name="tiktok-privacy" value="PUBLIC_TO_EVERYONE" checked>
+                        <label for="tiktok-public">Public</label>
+                    </div>
+                    <div class="option-item">
+                        <input type="radio" id="tiktok-friends" name="tiktok-privacy" value="MUTUAL_FOLLOW_FRIENDS">
+                        <label for="tiktok-friends">Friends Only</label>
+                    </div>
+                    <div class="option-item">
+                        <input type="radio" id="tiktok-private" name="tiktok-privacy" value="SELF_ONLY">
+                        <label for="tiktok-private">Private</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Interaction Settings</label>
+                <div class="option-group">
+                    <div class="option-item">
+                        <input type="checkbox" id="tiktok-allow-comments" checked>
+                        <label for="tiktok-allow-comments">Allow comments</label>
+                    </div>
+                    <div class="option-item">
+                        <input type="checkbox" id="tiktok-allow-duet" checked>
+                        <label for="tiktok-allow-duet">Allow Duet</label>
+                    </div>
+                    <div class="option-item">
+                        <input type="checkbox" id="tiktok-allow-stitch" checked>
+                        <label for="tiktok-allow-stitch">Allow Stitch</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Upload Mode</label>
+                <div class="option-group">
+                    <div class="option-item">
+                        <input type="radio" id="tiktok-draft" name="tiktok-mode" value="draft" checked>
+                        <label for="tiktok-draft">Save to Drafts (Review in TikTok app)</label>
+                    </div>
+                    <div class="option-item">
+                        <input type="radio" id="tiktok-direct" name="tiktok-mode" value="direct">
+                        <label for="tiktok-direct">Post Directly</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="caption-actions" style="margin-top: 2rem;">
+                <button class="btn btn-ghost" onclick="viralClipperApp.showScreen(2)">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Back to Edit
+                </button>
+                <button class="btn btn-primary" onclick="viralClipperApp.tiktokIntegration.upload()">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                    Upload to TikTok
+                </button>
+            </div>
+            
+            <div id="tiktok-upload-status" class="status-message"></div>
+        `;
+        
+        // Add character counters
+        this.setupCharCounters();
+    }
+    
+    setupCharCounters() {
+        const titleInput = document.getElementById('tiktok-title');
+        const descInput = document.getElementById('tiktok-description');
+        
+        if (titleInput) {
+            const counter = titleInput.parentElement.querySelector('.char-counter');
+            titleInput.addEventListener('input', (e) => {
+                const count = e.target.value.length;
+                counter.textContent = `${count} / 150`;
+                if (count >= 140) {
+                    counter.classList.add('warning');
+                } else {
+                    counter.classList.remove('warning');
+                }
+            });
+        }
+        
+        if (descInput) {
+            const counter = descInput.parentElement.querySelector('.char-counter');
+            descInput.addEventListener('input', (e) => {
+                const count = e.target.value.length;
+                counter.textContent = `${count} / 2200`;
+                if (count >= 2000) {
+                    counter.classList.add('warning');
+                } else {
+                    counter.classList.remove('warning');
+                }
+            });
+        }
+    }
+    
+    async upload() {
+        const title = document.getElementById('tiktok-title').value.trim();
+        const description = document.getElementById('tiktok-description').value.trim();
+        const privacyLevel = document.querySelector('input[name="tiktok-privacy"]:checked').value;
+        const allowComments = document.getElementById('tiktok-allow-comments').checked;
+        const allowDuet = document.getElementById('tiktok-allow-duet').checked;
+        const allowStitch = document.getElementById('tiktok-allow-stitch').checked;
+        const uploadMode = document.querySelector('input[name="tiktok-mode"]:checked').value;
+        
+        if (!title) {
+            this.app.showError('Title is required for TikTok');
+            return;
+        }
+        
+        if (!this.app.currentJobId) {
+            this.app.showError('No clip available for upload');
+            return;
+        }
+        
+        try {
+            const uploadStatus = document.getElementById('tiktok-upload-status');
+            uploadStatus.className = 'upload-status';
+            uploadStatus.innerHTML = '🔄 Starting TikTok upload...';
+            uploadStatus.classList.remove('hidden');
+            
+            const response = await fetch('/api/upload_to_tiktok', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    job_id: this.app.currentJobId,
+                    title: title,
+                    description: description,
+                    privacy_level: privacyLevel,
+                    allow_comments: allowComments,
+                    allow_duet: allowDuet,
+                    allow_stitch: allowStitch,
+                    upload_mode: uploadMode
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.currentUploadJob = result.upload_job_id;
+                uploadStatus.innerHTML = '🔄 Uploading to TikTok...';
+                
+                // Socket.io will handle progress updates
+            } else {
+                uploadStatus.className = 'upload-status error';
+                uploadStatus.innerHTML = `❌ ${result.error}`;
+                
+                if (response.status === 401) {
+                    // TikTok not connected
+                    setTimeout(() => {
+                        if (confirm('TikTok account not connected. Would you like to connect now?')) {
+                            this.connect();
+                        }
+                    }, 1000);
+                }
+            }
+        } catch (error) {
+            console.error('TikTok upload error:', error);
+            const uploadStatus = document.getElementById('tiktok-upload-status');
+            uploadStatus.className = 'upload-status error';
+            uploadStatus.innerHTML = '❌ Network error occurred';
+        }
+    }
+    
+    handleUploadProgress(data) {
+        if (data.upload_job_id !== this.currentUploadJob) return;
+        
+        const uploadStatus = document.getElementById('tiktok-upload-status');
+        if (uploadStatus) {
+            uploadStatus.innerHTML = `🔄 ${data.message} (${data.progress}%)`;
+        }
+    }
+    
+    handleUploadComplete(data) {
+        if (data.upload_job_id !== this.currentUploadJob) return;
+        
+        const uploadStatus = document.getElementById('tiktok-upload-status');
+        if (uploadStatus) {
+            uploadStatus.className = 'upload-status success';
+            uploadStatus.innerHTML = `
+                ✅ ${data.message}<br>
+                ${data.share_url ? `<a href="${data.share_url}" target="_blank" class="video-link">View on TikTok</a>` : ''}
+            `;
+        }
+        
+        this.currentUploadJob = null;
+        
+        // Load TikTok history
+        this.loadUploadHistory();
+    }
+    
+    handleUploadError(data) {
+        if (data.upload_job_id !== this.currentUploadJob) return;
+        
+        const uploadStatus = document.getElementById('tiktok-upload-status');
+        if (uploadStatus) {
+            uploadStatus.className = 'upload-status error';
+            uploadStatus.innerHTML = `❌ Upload failed: ${data.error}`;
+        }
+        
+        this.currentUploadJob = null;
+    }
+    
+    async loadUploadHistory() {
+        try {
+            const response = await fetch('/api/tiktok/upload_history');
+            if (!response.ok) return;
+            
+            const result = await response.json();
+            
+            if (result.uploads && result.uploads.length > 0) {
+                const historySection = document.getElementById('tiktok-upload-history');
+                if (historySection) {
+                    let html = '<h4>Recent TikTok Uploads</h4><div class="upload-history-list">';
+                    
+                    result.uploads.slice(0, 5).forEach(upload => {
+                        const uploadDate = new Date(upload.uploaded_at).toLocaleDateString();
+                        const statusIcon = upload.upload_type === 'direct' ? '📺' : '📝';
+                        html += `
+                            <div class="upload-history-item">
+                                ${upload.share_url ? 
+                                    `<a href="${upload.share_url}" target="_blank" class="upload-link">
+                                        ${statusIcon} ${upload.title}
+                                    </a>` :
+                                    `<span>${statusIcon} ${upload.title} (${upload.upload_type})</span>`
+                                }
+                                <span class="upload-date">${uploadDate}</span>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                    historySection.innerHTML = html;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load TikTok history:', error);
+        }
+    }
+}
 
 class ViralClipperApp {
     constructor() {
@@ -9,6 +427,9 @@ class ViralClipperApp {
         this.currentScreen = 1;
         this.currentUser = null;
         this.sessionId = null;
+        
+        // Initialize TikTok integration
+        this.tiktokIntegration = new TikTokIntegration(this);
         
         this.checkAuthStatus();
         this.initializeEventListeners();
@@ -34,6 +455,8 @@ class ViralClipperApp {
             // Check for recent clips after authentication
             if (this.currentUser) {
                 this.checkForRecentClips();
+                // Check TikTok connection
+                this.tiktokIntegration.checkConnection();
             }
             
         } catch (error) {
@@ -89,11 +512,11 @@ class ViralClipperApp {
                 <div class="user-profile">
                     ${this.currentUser.picture_url ? 
                         `<img src="${this.currentUser.picture_url}" alt="Profile" class="user-avatar">` : 
-                        '<div class="user-avatar-placeholder">👤</div>'
+                        '<div class="user-avatar">👤</div>'
                     }
                     <span class="user-name">${this.currentUser.name || this.currentUser.email}</span>
-                    <button class="logout-btn" id="logout-btn">Logout</button>
                 </div>
+                <button class="btn btn-ghost btn-sm" id="logout-btn">Logout</button>
             `;
             
             // Add logout listener
@@ -102,17 +525,20 @@ class ViralClipperApp {
             // Load upload history
             this.loadUploadHistory();
             
+            // Load platform connections
+            this.loadPlatformConnections();
+            
         } else {
             // User is not authenticated - show sign in button
             userInfo.innerHTML = `
-                <button class="google-signin-btn compact" id="header-signin-btn">
+                <button class="btn btn-secondary btn-sm" id="header-signin-btn">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M17.64 9.20454C17.64 8.56636 17.5827 7.95272 17.4764 7.36363H9V10.845H13.8436C13.635 11.97 13.0009 12.9231 12.0477 13.5613V15.8195H14.9564C16.6582 14.2527 17.64 11.9454 17.64 9.20454Z" fill="white"/>
-                        <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 9 14.4204C6.65591 14.4204 4.67182 12.8372 3.96409 10.71H0.957275V13.0418C2.43818 15.9831 5.48182 18 9 18Z" fill="white"/>
-                        <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="white"/>
-                        <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="white"/>
+                        <path d="M17.64 9.20454C17.64 8.56636 17.5827 7.95272 17.4764 7.36363H9V10.845H13.8436C13.635 11.97 13.0009 12.9231 12.0477 13.5613V15.8195H14.9564C16.6582 14.2527 17.64 11.9454 17.64 9.20454Z" fill="#4285F4"/>
+                        <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 9 14.4204C6.65591 14.4204 4.67182 12.8372 3.96409 10.71H0.957275V13.0418C2.43818 15.9831 5.48182 18 9 18Z" fill="#34A853"/>
+                        <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="#FBBC05"/>
+                        <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="#EA4335"/>
                     </svg>
-                    Sign in
+                    Sign in with Google
                 </button>
             `;
             
@@ -198,6 +624,19 @@ class ViralClipperApp {
 
         this.socket.on('upload_progress', (data) => {
             this.updateUploadProgress(data);
+        });
+
+        // TikTok socket listeners
+        this.socket.on('tiktok_upload_progress', (data) => {
+            this.tiktokIntegration.handleUploadProgress(data);
+        });
+
+        this.socket.on('tiktok_upload_complete', (data) => {
+            this.tiktokIntegration.handleUploadComplete(data);
+        });
+
+        this.socket.on('tiktok_upload_error', (data) => {
+            this.tiktokIntegration.handleUploadError(data);
         });
 
         this.socket.on('connect', () => {
@@ -491,6 +930,8 @@ class ViralClipperApp {
             this.showAuthPrompt();
         } else {
             this.showScreen(3);
+            // Update TikTok options
+            this.tiktokIntegration.showUploadOptions();
         }
     }
 
@@ -501,12 +942,12 @@ class ViralClipperApp {
         authPrompt.innerHTML = `
             <div class="auth-prompt-modal">
                 <h2>Sign in to Upload</h2>
-                <p>To upload your clip to YouTube, you need to sign in with your Google account.</p>
+                <p>To upload your clip to YouTube or TikTok, you need to sign in with your Google account.</p>
                 
                 <div class="auth-benefits">
                     <h4>Benefits of signing in:</h4>
                     <ul>
-                        <li>📤 Upload directly to your YouTube channel</li>
+                        <li>📤 Upload directly to YouTube and TikTok</li>
                         <li>📊 Track your upload history</li>
                         <li>💾 Save your clips to your account</li>
                         <li>🔄 Access your clips from anywhere</li>
@@ -547,6 +988,16 @@ class ViralClipperApp {
                 authPrompt.remove();
             }
         });
+    }
+
+    handlePlatformChange(platform) {
+        if (platform === 'youtube') {
+            // Show YouTube form
+            document.getElementById('platform-upload-form').innerHTML = document.getElementById('youtube-upload-form').innerHTML;
+        } else if (platform === 'tiktok') {
+            // Show TikTok form
+            this.tiktokIntegration.showTikTokUploadForm();
+        }
     }
 
     validateInputs(data) {
@@ -610,26 +1061,31 @@ class ViralClipperApp {
         this.resetProgressSteps();
     }
 
-    updateProgress(data) {
-        const progressFill = document.getElementById('progress-fill');
-        const progressPercentage = document.getElementById('progress-percentage');
-        const progressMessage = document.getElementById('progress-message');
+    // Update progress UI with circular progress
+updateProgress(data) {
+    const progressCircle = document.getElementById('progress-circle');
+    const progressPercentage = document.getElementById('progress-percentage');
+    const progressMessage = document.getElementById('progress-message');
 
-        progressFill.style.width = `${data.progress}%`;
-        progressPercentage.textContent = `${data.progress}%`;
-        progressMessage.textContent = data.message;
+    // Update circular progress
+    const circumference = 2 * Math.PI * 90; // radius = 90
+    const offset = circumference - (data.progress / 100) * circumference;
+    progressCircle.style.strokeDashoffset = offset;
 
-        // Update progress steps
-        this.updateProgressSteps(data.progress, data.message);
+    progressPercentage.textContent = `${data.progress}%`;
+    progressMessage.textContent = data.message;
 
-        if (data.status === 'error') {
-            this.showError(data.message);
-            this.showScreen(1);
-        }
+    // Update progress steps
+    this.updateProgressSteps(data.progress, data.message);
+
+    if (data.status === 'error') {
+        this.showError(data.message);
+        this.showScreen(1);
     }
+}
 
     updateProgressSteps(progress, message) {
-        const steps = document.querySelectorAll('.step');
+        const steps = document.querySelectorAll('.progress-step');
         
         // Reset all steps
         steps.forEach(step => {
@@ -662,14 +1118,22 @@ class ViralClipperApp {
     }
 
     resetProgressSteps() {
-        const steps = document.querySelectorAll('.step');
+        const steps = document.querySelectorAll('.progress-step');
         steps.forEach(step => {
             step.classList.remove('active', 'completed');
         });
         
-        document.getElementById('progress-fill').style.width = '0%';
-        document.getElementById('progress-percentage').textContent = '0%';
-        document.getElementById('progress-message').textContent = 'Initializing...';
+        // Reset circular progress
+        const progressCircle = document.getElementById('progress-circle');
+        if (progressCircle) {
+            const circumference = 2 * Math.PI * 90;
+            progressCircle.style.strokeDashoffset = circumference;
+        }
+        
+        const progressPercentage = document.getElementById('progress-percentage');
+        const progressMessage = document.getElementById('progress-message');
+        if (progressPercentage) progressPercentage.textContent = '0%';
+        if (progressMessage) progressMessage.textContent = 'Initializing...';
     }
 
     handleClipCompleted(data) {
@@ -711,12 +1175,21 @@ class ViralClipperApp {
         const endMMS = this.formatSecondsToMMSS(endTime);
         
         let html = `
-            <div class="detection-info">
-                <h4>Clip Details</h4>
-                <p><strong>Timing:</strong> ${startMMS} - ${endMMS}</p>
-                <p><strong>Confidence:</strong> ${clipData.detection_confidence.toFixed(2)}</p>
-                <p><strong>Auto-detected:</strong> ${clipData.auto_detected ? 'Yes' : 'No'}</p>
-                <p><strong>Speakers:</strong> ${clipData.video_speakers} detected</p>
+            <div class="info-item">
+                <div class="info-label">Timing</div>
+                <div class="info-value">${startMMS} - ${endMMS}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Confidence</div>
+                <div class="info-value">${clipData.detection_confidence.toFixed(2)}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Detection</div>
+                <div class="info-value">${clipData.auto_detected ? 'AI Auto' : 'Manual'}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Speakers</div>
+                <div class="info-value">${clipData.video_speakers} detected</div>
             </div>
         `;
 
@@ -737,14 +1210,18 @@ class ViralClipperApp {
             const speakerClass = `speaker-${speakerNum}`;
             
             html += `
-                <div class="caption-line" data-index="${index}">
-                    <select class="speaker-selector ${speakerClass}" data-index="${index}">
-                        <option value="1" ${speakerNum === 1 ? 'selected' : ''}>Speaker 1</option>
-                        <option value="2" ${speakerNum === 2 ? 'selected' : ''}>Speaker 2</option>
-                        <option value="3" ${speakerNum === 3 ? 'selected' : ''}>Speaker 3</option>
-                    </select>
-                    <input type="text" class="caption-text" value="${caption.text}" 
-                           data-index="${index}" placeholder="Edit caption text..." />
+                <div class="caption-item" data-index="${index}">
+                    <div class="caption-controls">
+                        <select class="speaker-selector ${speakerClass}" data-index="${index}">
+                            <option value="1" ${speakerNum === 1 ? 'selected' : ''}>Speaker 1</option>
+                            <option value="2" ${speakerNum === 2 ? 'selected' : ''}>Speaker 2</option>
+                            <option value="3" ${speakerNum === 3 ? 'selected' : ''}>Speaker 3</option>
+                        </select>
+                    </div>
+                    <textarea class="caption-text-input" 
+                             data-index="${index}" 
+                             placeholder="Edit caption text..."
+                             rows="2">${caption.text}</textarea>
                 </div>
             `;
         });
@@ -755,6 +1232,17 @@ class ViralClipperApp {
         document.querySelectorAll('.speaker-selector').forEach(select => {
             select.addEventListener('change', (e) => this.handleSpeakerChange(e));
         });
+        
+        // Auto-resize textareas
+        document.querySelectorAll('.caption-text-input').forEach(textarea => {
+            textarea.addEventListener('input', (e) => {
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+            });
+            // Initial resize
+            textarea.style.height = 'auto';
+            textarea.style.height = textarea.scrollHeight + 'px';
+        });
     }
 
     async updateCaptions() {
@@ -763,11 +1251,11 @@ class ViralClipperApp {
             return;
         }
 
-        const captionLines = document.querySelectorAll('.caption-line');
-        const updatedCaptions = Array.from(captionLines).map(line => {
-            const index = line.dataset.index;
-            const textInput = line.querySelector('.caption-text');
-            const speakerSelect = line.querySelector('.speaker-selector');
+        const captionItems = document.querySelectorAll('.caption-item');
+        const updatedCaptions = Array.from(captionItems).map(item => {
+            const index = item.dataset.index;
+            const textInput = item.querySelector('.caption-text-input');
+            const speakerSelect = item.querySelector('.speaker-selector');
             
             return {
                 index: parseInt(index),
@@ -921,6 +1409,182 @@ class ViralClipperApp {
         if (targetScreen) {
             targetScreen.classList.add('active');
             this.currentScreen = screenNumber;
+            
+            // Update TikTok options when showing upload screen
+            if (screenNumber === 3) {
+                this.tiktokIntegration.showUploadOptions();
+                this.initializePlatformTabs();
+                // Show YouTube form by default
+                this.showPlatformUploadForm('youtube');
+            }
+        }
+    }
+    
+    initializePlatformTabs() {
+        const tabs = document.querySelectorAll('.platform-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active from all tabs
+                tabs.forEach(t => t.classList.remove('active'));
+                // Add active to clicked tab
+                tab.classList.add('active');
+                // Show appropriate form
+                const platform = tab.dataset.platform;
+                this.selectedPlatform = platform;
+                this.showPlatformUploadForm(platform);
+            });
+        });
+    }
+    
+    showPlatformUploadForm(platform) {
+        const formContainer = document.getElementById('platform-upload-form');
+        
+        if (platform === 'youtube') {
+            formContainer.innerHTML = `
+                <h3 class="card-title">Upload to YouTube</h3>
+                
+                <div class="form-group">
+                    <label class="form-label" for="video-title">Video Title</label>
+                    <div class="input-with-counter">
+                        <input type="text" 
+                               id="video-title" 
+                               class="form-input" 
+                               placeholder="Enter your YouTube Short title..." 
+                               maxlength="100" 
+                               required>
+                        <div class="char-counter">0 / 100</div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="video-description">Description</label>
+                    <div class="input-with-counter">
+                        <textarea id="video-description" 
+                                  class="form-input" 
+                                  placeholder="Add a description for your Short...\n\n#Shorts #Viral" 
+                                  rows="6" 
+                                  maxlength="5000"></textarea>
+                        <div class="char-counter">0 / 5000</div>
+                    </div>
+                    <div class="form-hint">Include relevant hashtags for better reach</div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Privacy Settings</label>
+                    <div class="option-group">
+                        <div class="option-item">
+                            <input type="radio" id="private" name="privacy-status" value="private" checked>
+                            <label for="private">Private (only you can see)</label>
+                        </div>
+                        <div class="option-item">
+                            <input type="radio" id="unlisted" name="privacy-status" value="unlisted">
+                            <label for="unlisted">Unlisted (anyone with link)</label>
+                        </div>
+                        <div class="option-item">
+                            <input type="radio" id="public" name="privacy-status" value="public">
+                            <label for="public">Public (everyone can see)</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="caption-actions" style="margin-top: 2rem;">
+                    <button class="btn btn-ghost" onclick="viralClipperApp.showScreen(2)">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                        </svg>
+                        Back to Edit
+                    </button>
+                    <button id="upload-btn" class="btn btn-primary" onclick="viralClipperApp.uploadToYouTube()">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        Upload to YouTube
+                    </button>
+                </div>
+                
+                <div id="upload-status" class="status-message"></div>
+            `;
+            
+            // Setup character counters
+            this.setupYouTubeCharCounters();
+        } else if (platform === 'tiktok') {
+            this.tiktokIntegration.showTikTokUploadForm();
+        }
+    }
+
+    setupYouTubeCharCounters() {
+        const titleInput = document.getElementById('video-title');
+        const descInput = document.getElementById('video-description');
+        
+        if (titleInput) {
+            const counter = titleInput.parentElement.querySelector('.char-counter');
+            titleInput.addEventListener('input', (e) => {
+                const count = e.target.value.length;
+                counter.textContent = `${count} / 100`;
+                if (count >= 90) {
+                    counter.classList.add('warning');
+                } else {
+                    counter.classList.remove('warning');
+                }
+            });
+        }
+        
+        if (descInput) {
+            const counter = descInput.parentElement.querySelector('.char-counter');
+            descInput.addEventListener('input', (e) => {
+                const count = e.target.value.length;
+                counter.textContent = `${count} / 5000`;
+            });
+        }
+    }
+
+    async loadPlatformConnections() {
+        try {
+            const response = await fetch('/api/auth/platforms');
+            const data = await response.json();
+            
+            const connectionsDiv = document.getElementById('platform-connections');
+            if (!connectionsDiv) return;
+            
+            let html = '<h3 class="card-title" style="margin-bottom: 1rem;">Platform Connections</h3>';
+            html += '<div class="platform-connections">';
+            
+            // YouTube connection
+            const youtubeConnected = data.connected && data.connected.youtube;
+            html += `
+                <div class="platform-connection-card ${youtubeConnected ? 'connected' : 'disconnected'}">
+                    <div class="platform-info">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="#FF0000">
+                            <path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 2.19-.16 3.8-.44 4.83-.25.9-.83 1.48-1.73 1.73-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 19c-4.19 0-6.8-.16-7.83-.44-.9-.25-1.48-.83-1.73-1.73-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L2 12c0-2.19.16-3.8.44-4.83.25-.9.83-1.48 1.73-1.73.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 5c4.19 0 6.8.16 7.83.44.9.25 1.48.83 1.73 1.73z"/>
+                        </svg>
+                        <span>YouTube ${youtubeConnected ? '✓' : ''}</span>
+                    </div>
+                    ${!youtubeConnected ? '<span class="text-muted">Sign in to connect</span>' : ''}
+                </div>
+            `;
+            
+            // TikTok connection
+            const tiktokConnected = data.connected && data.connected.tiktok && data.connected.tiktok.connected;
+            html += `
+                <div class="platform-connection-card ${tiktokConnected ? 'connected' : 'disconnected'}">
+                    <div class="platform-info">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="#000000">
+                            <path d="M16.6 5.82s.51.5 0 0A4.278 4.278 0 0 1 15.54 3h-3.09v12.4a2.592 2.592 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6c0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64c0 3.33 2.76 5.7 5.69 5.7c3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3s-1.88.09-3.24-1.48z"/>
+                        </svg>
+                        <span>TikTok ${tiktokConnected ? '✓' : ''}</span>
+                    </div>
+                    ${tiktokConnected ? 
+                        `<button class="btn btn-ghost btn-sm" onclick="viralClipperApp.tiktokIntegration.disconnect()">Disconnect</button>` : 
+                        `<button class="btn btn-secondary btn-sm" onclick="viralClipperApp.tiktokIntegration.connect()">Connect</button>`
+                    }
+                </div>
+            `;
+            
+            html += '</div>';
+            connectionsDiv.innerHTML = html;
+            
+        } catch (error) {
+            console.error('Failed to load platform connections:', error);
         }
     }
 

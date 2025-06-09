@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🎯 VIRAL CLIPPER WEB APP - MULTI-PAGE VERSION 🎯
-Flask web application with multi-user OAuth support and multi-page architecture
+🎯 VIRAL CLIPPER WEB APP - MULTI-USER VERSION WITH ANONYMOUS SUPPORT 🎯
+Flask web application with multi-user OAuth support and anonymous clip generation
 """
 
 # Load environment variables first
@@ -20,18 +20,20 @@ import json
 import uuid
 import threading
 import time
+import logging
 from datetime import datetime, timedelta
 import psycopg2.extras
 
 # Import our modules
 from auto_peak_viral_clipper import AutoPeakViralClipper
 from caption_fragment_fix import merge_fragmented_captions
-from ass_caption_update_system_v5 import ASSCaptionUpdateSystemV5 as ASSCaptionUpdateSystem
+from ass_caption_update_system_v2 import ASSCaptionUpdateSystemV2 as ASSCaptionUpdateSystem
 
 # Import auth modules
 from auth import login_required, get_current_user, OAuthManager, User
 from auth.decorators import youtube_service_required, logout_user
 from database import init_db, get_db_connection
+
 
 # TikTok imports
 from auth.multi_platform_oauth import multi_platform_oauth
@@ -55,6 +57,9 @@ init_db(app)
 # Initialize SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Setup logging
+logger = logging.getLogger(__name__)
+
 # Initialize the clipper with ASS captions
 clipper = AutoPeakViralClipper()
 
@@ -64,8 +69,6 @@ oauth_manager = OAuthManager()
 # Store active jobs (now per user or session)
 active_jobs = {}
 
-import logging
-logger = logging.getLogger(__name__)
 
 class ClipJob:
     """Represents a clip generation job"""
@@ -80,7 +83,7 @@ class ClipJob:
         self.status = "starting"
         self.progress = 0
         self.message = "Initializing..."
-        self.clip_data = {}  # Initialize as empty dict instead of None
+        self.clip_data = None
         self.error = None
         self.created_at = datetime.now()
         self.regeneration_status = None
@@ -171,13 +174,18 @@ def update_job_progress(job_id, status, progress, message):
         job.progress = progress
         job.message = message
         
-        # Emit to job-specific room
+        # Emit to specific room (user or session based)
+        if job.user_id:
+            room = f"user_{job.user_id}"
+        else:
+            room = f"session_{job.session_id}"
+            
         socketio.emit('progress_update', {
             'job_id': job_id,
             'status': status,
             'progress': progress,
             'message': message
-        }, room=job_id)
+        }, room=room)
 
 
 def process_clip_generation(job_id):
@@ -200,35 +208,32 @@ def process_clip_generation(job_id):
         update_job_progress(job_id, "processing", 20, "Downloading video...")
         
         # Generate the clip
-        logger.info(f"Generating clip for job {job_id} with URL: {job.url}, duration: {actual_duration}, start: {actual_start_time}")
-        
         clip_data = clipper.generate_auto_peak_viral_clip(
             video_url=job.url,
             duration=actual_duration,
             manual_start_time=actual_start_time
         )
         
-        logger.info(f"Clip generation result for job {job_id}: {type(clip_data)}, has data: {bool(clip_data)}")
-        
         if clip_data:
-            logger.info(f"Clip data keys: {list(clip_data.keys())}")
             job.clip_data = clip_data
             update_job_progress(job_id, "completed", 100, "Clip generated successfully!")
             
             # Extract caption data for editing
             caption_data = extract_caption_data(clip_data)
             job.clip_data['captions'] = caption_data
-            logger.info(f"Added {len(caption_data)} captions to clip data")
             
             # Save anonymous clip to database if anonymous
             if job.is_anonymous:
                 save_anonymous_clip(job)
             
+            # Determine room for emission
+            room = f"user_{job.user_id}" if job.user_id else f"session_{job.session_id}"
+            
             socketio.emit('clip_completed', {
                 'job_id': job_id,
-                'clip_data': job.clip_data,  # Use job.clip_data which includes captions
+                'clip_data': clip_data,
                 'captions': caption_data
-            }, room=job_id)
+            }, room=room)
         else:
             job.error = "Clip generation failed"
             update_job_progress(job_id, "error", 0, "Clip generation failed")
@@ -238,118 +243,19 @@ def process_clip_generation(job_id):
         update_job_progress(job_id, "error", 0, f"Error: {str(e)}")
 
 
-# ==================== PAGE ROUTES ====================
-
-@app.route('/')
-def index():
-    """Home page - Input form"""
-    return render_template('pages/input.html')
-
-@app.route('/process')
-def process_page():
-    """Processing page - Shows progress"""
-    job_id = request.args.get('job_id')
-    if not job_id:
-        return redirect(url_for('index'))
-    return render_template('pages/process.html', job_id=job_id)
-
-@app.route('/edit')
-def edit_page():
-    """Edit captions page"""
-    job_id = request.args.get('job_id')
-    if not job_id:
-        return redirect(url_for('index'))
-    
-    # Get job data
-    user = get_current_user()
-    session_id = get_or_create_session_id()
-    
-    if job_id not in active_jobs:
-        return redirect(url_for('index'))
-    
-    job = active_jobs[job_id]
-    
-    # Check authorization
-    if job.user_id:
-        if not user or job.user_id != user.id:
-            return redirect(url_for('index'))
-    else:
-        if job.session_id != session_id:
-            return redirect(url_for('index'))
-    
-    # Check if job is completed
-    if job.status != 'completed':
-        # If not completed, redirect back to processing page
-        logger.warning(f"Job {job_id} not completed, status: {job.status}")
-        return redirect(url_for('process_page', job_id=job_id))
-    
-    if not job.clip_data:
-        logger.error(f"Job {job_id} is completed but has no clip_data")
-        # Try to refresh the clip data
-        if hasattr(job, 'refresh_clip_data'):
-            job.refresh_clip_data()
-        
-        if not job.clip_data:
-            # Still no data, show error
-            return render_template('pages/edit.html', 
-                                 job_id=job_id, 
-                                 clip_data={},
-                                 error="Clip data not found. Please try regenerating the clip.")
-    
-    # Get clip data
-    clip_data = job.clip_data
-    
-    # Log the clip data for debugging
-    logger.info(f"Edit page - Job ID: {job_id}, Clip data keys: {list(clip_data.keys()) if clip_data else 'None'}")
-    if clip_data:
-        logger.info(f"Full clip_data: {json.dumps(clip_data, indent=2)}")
-        if 'path' in clip_data:
-            logger.info(f"Clip path: {clip_data['path']}")
-        if 'captions' in clip_data:
-            logger.info(f"Number of captions: {len(clip_data['captions'])}")
-    else:
-        logger.error(f"No clip data for job {job_id}")
-    
-    return render_template('pages/edit.html', 
-                         job_id=job_id, 
-                         clip_data=clip_data)
-
-@app.route('/upload')
-@login_required
-def upload_page():
-    """Upload page - Requires authentication"""
-    job_id = request.args.get('job_id')
-    if not job_id:
-        return redirect(url_for('index'))
-    
-    # Verify user owns this clip
-    user = get_current_user()
-    
-    if job_id not in active_jobs:
-        return redirect(url_for('index'))
-    
-    job = active_jobs[job_id]
-    
-    # For anonymous jobs, convert them to user jobs
-    if job.is_anonymous:
-        job.user_id = user.id
-        job.is_anonymous = False
-        convert_anonymous_clips_to_user(job.session_id, user.id)
-    elif job.user_id != user.id:
-        return redirect(url_for('index'))
-    
-    return render_template('pages/upload.html', job_id=job_id)
-
-
-# ==================== AUTH ROUTES ====================
-
+# Auth routes
 @app.route('/api/auth/login')
 def auth_login():
     """Initiate OAuth login flow"""
     # Store the current session ID to convert anonymous clips later
     session['pre_auth_session_id'] = get_or_create_session_id()
     
-    redirect_uri = url_for('auth_callback', _external=True)
+    # Force localhost redirect URI for development
+    if os.getenv('FLASK_ENV') == 'development':
+        redirect_uri = 'http://localhost:5000/api/auth/callback'
+    else:
+        redirect_uri = url_for('auth_callback', _external=True)
+        
     authorization_url, state = oauth_manager.get_authorization_url(redirect_uri)
     
     # Store state in session for CSRF protection
@@ -371,8 +277,12 @@ def auth_callback():
     if not state or state != stored_state:
         return render_template('auth_error.html', error='Invalid state parameter')
     
-    # Handle the callback
-    redirect_uri = url_for('auth_callback', _external=True)
+    # Handle the callback - use same redirect URI logic
+    if os.getenv('FLASK_ENV') == 'development':
+        redirect_uri = 'http://localhost:5000/api/auth/callback'
+    else:
+        redirect_uri = url_for('auth_callback', _external=True)
+        
     user = oauth_manager.handle_oauth_callback(
         request.url, state, redirect_uri
     )
@@ -384,8 +294,8 @@ def auth_callback():
             converted_count = convert_anonymous_clips_to_user(pre_auth_session_id, user.id)
             print(f"Converted {converted_count} anonymous clips to user {user.email}")
         
-        # Redirect to home page with success indicator
-        return redirect(url_for('index', auth='success'))
+        # Redirect to main app
+        return redirect(url_for('index'))
     else:
         return render_template('auth_error.html', error='Authentication failed')
 
@@ -419,7 +329,12 @@ def auth_status():
     return jsonify(response_data)
 
 
-# ==================== API ROUTES ====================
+# Main routes
+@app.route('/')
+def index():
+    """Main page"""
+    return render_template('index_multiuser.html')
+
 
 @app.route('/api/generate_clip', methods=['POST'])
 def generate_clip():
@@ -491,85 +406,6 @@ def job_status(job_id):
         'error': job.error,
         'is_anonymous': job.is_anonymous
     })
-
-
-@app.route('/api/user_activity')
-@login_required
-def user_activity():
-    """Get user's recent activity"""
-    user = get_current_user()
-    
-    # Get user's recent clips
-    recent_clips = []
-    for job_id, job in active_jobs.items():
-        if job.user_id == user.id and job.status == 'completed':
-            recent_clips.append({
-                'job_id': job_id,
-                'original_title': job.clip_data.get('original_title', 'Untitled') if job.clip_data else 'Untitled',
-                'duration': job.clip_data.get('duration', 30) if job.clip_data else 30,
-                'created_at': job.created_at.isoformat()
-            })
-    
-    # Sort by date
-    recent_clips.sort(key=lambda x: x['created_at'], reverse=True)
-    
-    return jsonify({
-        'recent_clips': recent_clips[:10]
-    })
-
-
-@app.route('/api/update_captions', methods=['POST'])
-def update_captions():
-    """Update captions - accessible by session or user"""
-    user = get_current_user()
-    session_id = get_or_create_session_id()
-    data = request.json
-    job_id = data.get('job_id')
-    captions = data.get('captions', [])
-    
-    if job_id not in active_jobs:
-        return jsonify({'error': 'Job not found'}), 404
-    
-    job = active_jobs[job_id]
-    
-    # Check authorization
-    if job.user_id:
-        if not user or job.user_id != user.id:
-            return jsonify({'error': 'Unauthorized'}), 403
-    else:
-        if job.session_id != session_id:
-            return jsonify({'error': 'Unauthorized'}), 403
-    
-    if not job.clip_data:
-        return jsonify({'error': 'No clip data available'}), 400
-    
-    try:
-        # Preprocess captions to fix fragmentation
-        avg_text_length = sum(len(c.get('text', '')) for c in captions) / len(captions) if captions else 0
-        
-        if avg_text_length < 5:
-            captions = merge_fragmented_captions(captions)
-        
-        # Create regeneration job ID
-        regen_job_id = f"regen_{str(uuid.uuid4())[:8]}"
-        job.regeneration_job_id = regen_job_id
-        
-        # Start background regeneration
-        regeneration_thread = threading.Thread(
-            target=regenerate_video_background_ass, 
-            args=(job_id, captions)
-        )
-        regeneration_thread.daemon = True
-        regeneration_thread.start()
-        
-        return jsonify({
-            'status': 'success', 
-            'message': 'Caption update started',
-            'regeneration_job_id': regen_job_id
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to start caption update: {str(e)}'}), 500
 
 
 @app.route('/api/upload_to_youtube', methods=['POST'])
@@ -710,46 +546,111 @@ def get_upload_history():
     })
 
 
-# ==================== STATIC FILE ROUTES ====================
+@app.route('/api/anonymous_clips')
+def get_anonymous_clips_list():
+    """Get list of anonymous clips for current session"""
+    session_id = get_or_create_session_id()
+    clips = get_anonymous_clips(session_id)
+    
+    return jsonify({
+        'clips': [
+            {
+                'job_id': clip['job_id'],
+                'video_url': clip['video_url'],
+                'created_at': clip['created_at'].isoformat() if clip['created_at'] else None,
+                'expires_at': clip['expires_at'].isoformat() if clip['expires_at'] else None
+            }
+            for clip in clips
+        ]
+    })
+
+
+@app.route('/api/user_clips')
+@login_required
+def get_user_clips():
+    """Get user's recent clips (converted from anonymous)"""
+    user = get_current_user()
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    try:
+        # Get clips that were converted from anonymous to this user
+        cur.execute('''
+            SELECT * FROM anonymous_clips 
+            WHERE converted_to_user_id = %s 
+            ORDER BY converted_at DESC 
+            LIMIT 10
+        ''', (user.id,))
+        
+        clips = cur.fetchall()
+        
+        # Also get active jobs for this user
+        user_jobs = [
+            {
+                'job_id': job_id,
+                'status': job.status,
+                'created_at': job.created_at.isoformat(),
+                'video_url': job.url
+            }
+            for job_id, job in active_jobs.items()
+            if job.user_id == user.id and job.status == 'completed'
+        ]
+        
+        return jsonify({
+            'converted_clips': [
+                {
+                    'job_id': clip['job_id'],
+                    'video_url': clip['video_url'],
+                    'created_at': clip['created_at'].isoformat() if clip['created_at'] else None,
+                    'converted_at': clip['converted_at'].isoformat() if clip['converted_at'] else None
+                }
+                for clip in clips
+            ],
+            'active_clips': user_jobs
+        })
+    finally:
+        cur.close()
+        conn.close()
+
 
 @app.route('/clips/<filename>')
 def serve_clip(filename):
     """Serve video clips"""
-    response = send_from_directory('clips', filename)
-    
-    # Add headers for video files
-    if filename.endswith('.mp4'):
-        response.headers['Content-Type'] = 'video/mp4'
-        response.headers['Accept-Ranges'] = 'bytes'
-    elif filename.endswith('.ass'):
-        response.headers['Content-Type'] = 'text/plain; charset=utf-8'
-    
-    return response
+    return send_from_directory('clips', filename)
 
 
-# ==================== WEBSOCKET EVENTS ====================
-
+# WebSocket events
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection"""
-    # Get job_id from query params if available
-    from flask_socketio import join_room
+    user = get_current_user()
+    session_id = get_or_create_session_id()
     
-    job_id = request.args.get('job_id')
-    if job_id:
-        join_room(job_id)
-        emit('connected', {'room': job_id, 'type': 'job'})
-        print(f'Client connected to job room: {job_id}')
+    if user:
+        # Join user-specific room
+        room = f"user_{user.id}"
+        socketio.server.enter_room(request.sid, room)
+        print(f'User {user.email} connected to room {room}')
+        emit('connected', {'room': room, 'type': 'user'})
+    else:
+        # Join session-specific room for anonymous users
+        room = f"session_{session_id}"
+        socketio.server.enter_room(request.sid, room)
+        print(f'Anonymous user connected to room {room}')
+        emit('connected', {'room': room, 'type': 'anonymous'})
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
-    print('Client disconnected')
+    user = get_current_user()
+    if user:
+        print(f'User {user.email} disconnected')
+    else:
+        print('Anonymous user disconnected')
 
 
-# ==================== HELPER FUNCTIONS ====================
-
+# Helper functions
 def parse_time_to_seconds(time_str):
     """Convert MM:SS or seconds to seconds"""
     if not time_str:
@@ -877,6 +778,56 @@ def extract_captions_from_ass_fixed(ass_file_path: str):
         return []
 
 
+@app.route('/api/update_captions', methods=['POST'])
+def update_captions():
+    """Update captions - accessible by session or user"""
+    user = get_current_user()
+    session_id = get_or_create_session_id()
+    data = request.json
+    job_id = data.get('job_id')
+    captions = data.get('captions', [])
+    
+    if job_id not in active_jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    job = active_jobs[job_id]
+    
+    # Check authorization
+    if job.user_id:
+        if not user or job.user_id != user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+    else:
+        if job.session_id != session_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+    
+    if not job.clip_data:
+        return jsonify({'error': 'No clip data available'}), 400
+    
+    try:
+        # Preprocess captions to fix fragmentation
+        avg_text_length = sum(len(c.get('text', '')) for c in captions) / len(captions) if captions else 0
+        
+        if avg_text_length < 5:
+            captions = merge_fragmented_captions(captions)
+        
+        # Start background regeneration
+        regeneration_thread = threading.Thread(
+            target=regenerate_video_background_ass, 
+            args=(job_id, captions)
+        )
+        regeneration_thread.daemon = True
+        regeneration_thread.start()
+        
+        return jsonify({
+            'status': 'success', 
+            'message': 'Caption update started. Video is being regenerated in background.',
+            'regeneration_started': True
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to start caption update: {str(e)}'}), 500
+
+
 def regenerate_video_background_ass(job_id, updated_captions):
     """Background thread for video regeneration using ASS caption system"""
     try:
@@ -886,13 +837,15 @@ def regenerate_video_background_ass(job_id, updated_captions):
         job.regeneration_status = 'processing'
         job.regeneration_progress = 10
         
+        # Determine room
+        room = f"user_{job.user_id}" if job.user_id else f"session_{job.session_id}"
+        
         socketio.emit('regeneration_update', {
             'job_id': job_id,
-            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 10,
             'message': 'Creating captions using ASS system...'
-        }, room=job_id)
+        }, room=room)
         
         subtitle_file = original_clip_data.get('subtitle_file')
         original_video_path = original_clip_data['path']
@@ -903,15 +856,12 @@ def regenerate_video_background_ass(job_id, updated_captions):
         job.regeneration_progress = 30
         socketio.emit('regeneration_update', {
             'job_id': job_id,
-            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 30,
-            'message': 'Updating ASS captions...'
-        }, room=job_id)
+            'message': 'Using ASS caption system...'
+        }, room=room)
         
-        # CRITICAL FIX: Use the video duration for proper caption distribution
-        video_duration = job.duration if hasattr(job, 'duration') else 30.0
-        success = clipper.update_captions_ass(subtitle_file, updated_captions, video_duration)
+        success = clipper.update_captions_ass(subtitle_file, updated_captions)
         
         if not success:
             raise Exception('Failed to update captions using ASS system')
@@ -919,11 +869,10 @@ def regenerate_video_background_ass(job_id, updated_captions):
         job.regeneration_progress = 50
         socketio.emit('regeneration_update', {
             'job_id': job_id,
-            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 50,
             'message': 'Creating video with updated captions...'
-        }, room=job_id)
+        }, room=room)
         
         temp_ass_path = original_video_path.replace('.mp4', '_ASS_temp.mp4')
         base_video_path = original_video_path.replace('.mp4', '_temp_switching.mp4')
@@ -938,11 +887,10 @@ def regenerate_video_background_ass(job_id, updated_captions):
         job.regeneration_progress = 70
         socketio.emit('regeneration_update', {
             'job_id': job_id,
-            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 70,
             'message': 'Burning ASS captions into video...'
-        }, room=job_id)
+        }, room=room)
         
         success = clipper.burn_captions_into_video_debug(
             base_video_path,
@@ -956,11 +904,10 @@ def regenerate_video_background_ass(job_id, updated_captions):
         job.regeneration_progress = 90
         socketio.emit('regeneration_update', {
             'job_id': job_id,
-            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 90,
-            'message': 'Finalizing video...'
-        }, room=job_id)
+            'message': 'Finalizing ASS caption video...'
+        }, room=room)
         
         if os.path.exists(original_video_path):
             os.remove(original_video_path)
@@ -980,11 +927,11 @@ def regenerate_video_background_ass(job_id, updated_captions):
         
         socketio.emit('regeneration_complete', {
             'job_id': job_id,
-            'regeneration_job_id': job.regeneration_job_id,
             'status': 'completed',
             'progress': 100,
-            'message': 'Video updated with captions!'
-        }, room=job_id)
+            'message': 'Video updated with captions!',
+            'updated_path': original_video_path
+        }, room=room)
         
     except Exception as e:
         print(f"Video regeneration failed for job {job_id}: {e}")
@@ -994,60 +941,18 @@ def regenerate_video_background_ass(job_id, updated_captions):
             job.regeneration_status = 'failed'
             job.regeneration_progress = 0
             
+            room = f"user_{job.user_id}" if job.user_id else f"session_{job.session_id}"
+            
             socketio.emit('regeneration_error', {
                 'job_id': job_id,
-                'regeneration_job_id': job.regeneration_job_id,
                 'status': 'failed',
-                'error': str(e)
-            }, room=job_id)
+                'error': f'ASS regeneration failed: {str(e)}'
+            }, room=room)
 
-
-@app.route('/api/available_clips')
-def get_available_clips():
-    """Get list of available clip files"""
-    clips_dir = os.path.join(os.path.dirname(__file__), 'clips')
-    clips = []
-    
-    if os.path.exists(clips_dir):
-        for file in sorted(os.listdir(clips_dir)):
-            if file.endswith('.mp4') and not file.endswith('_no_captions.mp4') and not file.startswith('.'):
-                clips.append(file)
-    
-    return jsonify({'clips': clips})
-
-@app.route('/api/fix_job/<job_id>', methods=['POST'])
-def fix_job_data(job_id):
-    """Fix missing job data by reconstructing from files"""
-    if job_id not in active_jobs:
-        return jsonify({'error': 'Job not found'}), 404
-    
-    job = active_jobs[job_id]
-    
-    # Try to reconstruct clip data
-    reconstructed = attempt_reconstruct_clip_data(job)
-    if reconstructed:
-        if not job.clip_data:
-            job.clip_data = {}
-        
-        # Update job clip data with reconstructed data
-        job.clip_data.update(reconstructed)
-        
-        # Extract captions if subtitle file exists
-        if reconstructed.get('subtitle_file'):
-            caption_data = extract_caption_data({'subtitle_file': reconstructed['subtitle_file']})
-            job.clip_data['captions'] = caption_data
-        
-        return jsonify({
-            'success': True,
-            'message': 'Job data reconstructed',
-            'clip_data': job.clip_data
-        })
-    
-    return jsonify({'error': 'Could not reconstruct job data'}), 400
 
 @app.route('/api/refresh_video/<job_id>')
 def refresh_video(job_id):
-    """Refresh video data"""
+    """Refresh video data - accessible by session or user"""
     user = get_current_user()
     session_id = get_or_create_session_id()
     
@@ -1078,102 +983,306 @@ def refresh_video(job_id):
         'status': 'success',
         'clip_data': job.clip_data,
         'captions': caption_data,
-        'video_url': f"/clips/{filename}?v={cache_buster}"
+        'video_url': f"/clips/{filename}?v={cache_buster}",
+        'message': 'Video data refreshed successfully'
     })
 
 
-@app.route('/api/debug/job/<job_id>')
-def debug_job(job_id):
-    """Debug endpoint to check job data"""
+@app.route('/api/back_to_input', methods=['POST'])
+def back_to_input():
+    """Go back to input screen and clear current job"""
+    user = get_current_user()
+    session_id = get_or_create_session_id()
+    data = request.json
+    job_id = data.get('job_id')
+    
+    if job_id in active_jobs:
+        job = active_jobs[job_id]
+        # Check authorization
+        if job.user_id:
+            if user and job.user_id == user.id:
+                del active_jobs[job_id]
+        else:
+            if job.session_id == session_id:
+                del active_jobs[job_id]
+    
+    return jsonify({'status': 'success', 'message': 'Returned to input screen'})
+
+
+
+# TikTok routes
+@app.route('/api/auth/platforms')
+def get_auth_platforms():
+    """Get available authentication platforms and their status"""
+    user = get_current_user()
+    
+    platforms = multi_platform_oauth.get_available_platforms()
+    
+    if user:
+        # Get user's connected platforms
+        connections = multi_platform_oauth.get_platform_connections(user)
+        
+        return jsonify({
+            'available': platforms,
+            'connected': connections
+        })
+    else:
+        return jsonify({
+            'available': platforms,
+            'connected': {}
+        })
+
+
+@app.route('/api/auth/connect/<platform>')
+@login_required
+def connect_platform(platform):
+    """Initiate connection to additional platform"""
+    user = get_current_user()
+    
+    if platform not in ['tiktok']:
+        return jsonify({'error': 'Invalid platform'}), 400
+    
+    redirect_uri = url_for('platform_callback', platform=platform, _external=True)
+    
+    auth_url, state = multi_platform_oauth.initiate_platform_auth(
+        platform, redirect_uri, user
+    )
+    
+    if not auth_url:
+        return jsonify({'error': f'{platform} authentication not configured'}), 500
+    
+    # Store state for verification
+    session[f'{platform}_oauth_state'] = state
+    
+    return jsonify({
+        'authorization_url': auth_url,
+        'status': 'redirect_required'
+    })
+
+
+@app.route('/api/auth/callback/<platform>')
+def platform_callback(platform):
+    """Handle OAuth callback for additional platforms"""
+    # Verify state
+    state = request.args.get('state')
+    stored_state = session.pop(f'{platform}_oauth_state', None)
+    
+    if not state or state != stored_state:
+        return render_template('auth_error.html', error='Invalid state parameter')
+    
+    redirect_uri = url_for('platform_callback', platform=platform, _external=True)
+    
+    user = multi_platform_oauth.handle_platform_callback(
+        platform, request.url, state, redirect_uri
+    )
+    
+    if user:
+        # Redirect to main app with success message
+        return redirect(url_for('index') + f'?platform_connected={platform}')
+    else:
+        return render_template('auth_error.html', error=f'{platform.title()} connection failed')
+
+
+@app.route('/api/auth/disconnect/<platform>', methods=['POST'])
+@login_required
+def disconnect_platform(platform):
+    """Disconnect a platform from user account"""
+    user = get_current_user()
+    
+    if platform == 'google':
+        return jsonify({'error': 'Cannot disconnect primary authentication'}), 400
+    
+    success = multi_platform_oauth.disconnect_platform(user, platform)
+    
+    if success:
+        return jsonify({'status': 'success', 'message': f'{platform.title()} disconnected'})
+    else:
+        return jsonify({'error': 'Failed to disconnect platform'}), 500
+
+
+@app.route('/api/upload_to_tiktok', methods=['POST'])
+@login_required
+def upload_to_tiktok():
+    """Upload clip to TikTok"""
+    user = get_current_user()
+    
+    # Get TikTok client
+    tiktok_client = multi_platform_oauth.get_tiktok_client(user)
+    if not tiktok_client:
+        return jsonify({'error': 'TikTok not connected. Please connect your TikTok account first.'}), 401
+    
+    data = request.json
+    job_id = data.get('job_id')
+    title = data.get('title', '').strip()
+    description = data.get('description', '').strip()
+    privacy_level = data.get('privacy_level', 'SELF_ONLY')
+    allow_comments = data.get('allow_comments', True)
+    allow_duet = data.get('allow_duet', True)
+    allow_stitch = data.get('allow_stitch', True)
+    upload_mode = data.get('upload_mode', 'draft')  # 'direct' or 'draft'
+    
     if job_id not in active_jobs:
         return jsonify({'error': 'Job not found'}), 404
     
     job = active_jobs[job_id]
     
-    # Check if files exist
-    files_info = {}
-    if job.clip_data and 'path' in job.clip_data:
+    # Check authorization
+    if job.user_id != user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    if not job.clip_data:
+        return jsonify({'error': 'No clip available for upload'}), 400
+    
+    if not title:
+        return jsonify({'error': 'Title is required for TikTok'}), 400
+    
+    try:
         video_path = job.clip_data['path']
-        files_info['video_exists'] = os.path.exists(video_path)
-        files_info['video_path'] = video_path
-        files_info['video_size'] = os.path.getsize(video_path) if os.path.exists(video_path) else 0
-    else:
-        # Try to find video files based on patterns
-        clips_dir = os.path.join(os.path.dirname(__file__), 'clips')
-        possible_files = []
-        if os.path.exists(clips_dir):
-            for file in os.listdir(clips_dir):
-                if file.endswith('.mp4') and not file.endswith('_no_captions.mp4'):
-                    possible_files.append(file)
-        files_info['possible_video_files'] = possible_files
-    
-    if job.clip_data and 'subtitle_file' in job.clip_data:
-        subtitle_path = job.clip_data['subtitle_file']
-        files_info['subtitle_exists'] = os.path.exists(subtitle_path)
-        files_info['subtitle_path'] = subtitle_path
-    
-    # Try to reconstruct clip data if missing
-    reconstructed_data = None
-    if not job.clip_data or not job.clip_data.get('path'):
-        reconstructed_data = attempt_reconstruct_clip_data(job)
-    
-    return jsonify({
-        'job_id': job_id,
-        'status': job.status,
-        'progress': job.progress,
-        'message': job.message,
-        'clip_data_keys': list(job.clip_data.keys()) if job.clip_data else None,
-        'has_captions': 'captions' in job.clip_data if job.clip_data else False,
-        'captions_count': len(job.clip_data.get('captions', [])) if job.clip_data else 0,
-        'files_info': files_info,
-        'error': job.error,
-        'reconstructed_data': reconstructed_data
-    })
+        
+        if not os.path.exists(video_path):
+            return jsonify({'error': 'Video file not found'}), 404
+        
+        # Create upload job ID
+        upload_job_id = str(uuid.uuid4())
+        
+        # Start upload in background
+        thread = threading.Thread(
+            target=process_tiktok_upload,
+            args=(user.id, tiktok_client, video_path, title, description,
+                  privacy_level, allow_comments, allow_duet, allow_stitch,
+                  upload_mode == 'direct', upload_job_id, job_id)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'status': 'started',
+            'upload_job_id': upload_job_id,
+            'message': 'TikTok upload started'
+        })
+        
+    except Exception as e:
+        logger.error(f"TikTok upload error: {e}")
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
-def attempt_reconstruct_clip_data(job):
-    """Attempt to reconstruct clip data from available files"""
-    clips_dir = os.path.join(os.path.dirname(__file__), 'clips')
-    
-    # Look for video files that might match this job
-    video_patterns = [
-        f"auto_peak_clip_*_{job.start_time or job.duration}s.mp4",
-        f"auto_peak_clip__{job.start_time or job.duration}s.mp4",
-        f"clip_{job.job_id}.mp4"
-    ]
-    
-    import glob
-    for pattern in video_patterns:
-        matches = glob.glob(os.path.join(clips_dir, pattern))
-        if matches:
-            video_path = matches[0]
-            video_filename = os.path.basename(video_path)
+
+def process_tiktok_upload(user_id, tiktok_client, video_path, title, description,
+                         privacy_level, allow_comments, allow_duet, allow_stitch,
+                         direct_post, upload_job_id, job_id):
+    """Background process for TikTok upload"""
+    try:
+        # Progress callback
+        def progress_callback(progress, message):
+            socketio.emit('tiktok_upload_progress', {
+                'upload_job_id': upload_job_id,
+                'progress': progress,
+                'message': message
+            }, room=f"user_{user_id}")
+        
+        # Upload video
+        result = tiktok_client.upload_video(
+            video_path=video_path,
+            title=title,
+            description=description,
+            privacy_level=privacy_level,
+            allow_comments=allow_comments,
+            allow_duet=allow_duet,
+            allow_stitch=allow_stitch,
+            direct_post=direct_post,
+            progress_callback=progress_callback
+        )
+        
+        if result:
+            # Save to upload history
+            conn = get_db_connection()
+            cur = conn.cursor()
             
-            # Look for corresponding subtitle file
-            subtitle_path = video_path.replace('.mp4', '_captions.ass')
+            try:
+                cur.execute('''
+                    INSERT INTO tiktok_upload_history 
+                    (user_id, job_id, publish_id, video_title, video_description,
+                     video_path, share_url, privacy_level, upload_type, upload_status, completed_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ''', (
+                    user_id, job_id, result.get('publish_id'),
+                    title, description, video_path,
+                    result.get('share_url'), privacy_level,
+                    'direct' if direct_post else 'draft',
+                    'completed'
+                ))
+                conn.commit()
+            finally:
+                cur.close()
+                conn.close()
             
-            return {
-                'path': video_path,
-                'filename': video_filename,
-                'subtitle_file': subtitle_path if os.path.exists(subtitle_path) else None,
-                'reconstructed': True
-            }
+            # Emit success
+            socketio.emit('tiktok_upload_complete', {
+                'upload_job_id': upload_job_id,
+                'status': 'success',
+                'share_url': result.get('share_url'),
+                'message': 'Successfully uploaded to TikTok!'
+            }, room=f"user_{user_id}")
+            
+        else:
+            # Emit failure
+            socketio.emit('tiktok_upload_error', {
+                'upload_job_id': upload_job_id,
+                'status': 'failed',
+                'error': 'Upload failed'
+            }, room=f"user_{user_id}")
+            
+    except Exception as e:
+        logger.error(f"TikTok upload process error: {e}")
+        
+        # Emit error
+        socketio.emit('tiktok_upload_error', {
+            'upload_job_id': upload_job_id,
+            'status': 'failed',
+            'error': str(e)
+        }, room=f"user_{user_id}")
+
+
+@app.route('/api/tiktok/upload_history')
+@login_required
+def get_tiktok_history():
+    """Get user's TikTok upload history"""
+    user = get_current_user()
     
-    return None
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    try:
+        cur.execute('''
+            SELECT * FROM tiktok_upload_history 
+            WHERE user_id = %s 
+            ORDER BY uploaded_at DESC 
+            LIMIT 20
+        ''', (user.id,))
+        
+        history = cur.fetchall()
+        
+        return jsonify({
+            'uploads': [
+                {
+                    'publish_id': item['publish_id'],
+                    'title': item['video_title'],
+                    'description': item['video_description'],
+                    'share_url': item['share_url'],
+                    'privacy_level': item['privacy_level'],
+                    'upload_type': item['upload_type'],
+                    'status': item['upload_status'],
+                    'uploaded_at': item['uploaded_at'].isoformat() if item['uploaded_at'] else None,
+                    'completed_at': item['completed_at'].isoformat() if item['completed_at'] else None
+                }
+                for item in history
+            ]
+        })
+    finally:
+        cur.close()
+        conn.close()
 
 
-# ==================== ERROR PAGES ====================
-
-@app.errorhandler(404)
-def not_found(e):
-    return render_template('404.html'), 404
-
-@app.errorhandler(500)
-def server_error(e):
-    return render_template('500.html'), 500
-
-
-# ==================== CLEANUP ====================
-
+# Cleanup task for expired anonymous clips
 def cleanup_expired_clips():
     """Cleanup expired anonymous clips periodically"""
     conn = get_db_connection()
@@ -1190,6 +1299,7 @@ def cleanup_expired_clips():
         conn.close()
 
 
+# Schedule cleanup task (you might want to use a proper scheduler in production)
 def schedule_cleanup():
     while True:
         time.sleep(3600)  # Run every hour
@@ -1203,6 +1313,7 @@ if __name__ == '__main__':
     
     # Run migration for anonymous clips
     try:
+        # Import the migration module dynamically to avoid syntax issues
         import importlib.util
         spec = importlib.util.spec_from_file_location("anonymous_clips_migration", "migrations/002_anonymous_clips.py")
         migration_module = importlib.util.module_from_spec(spec)
@@ -1216,10 +1327,22 @@ if __name__ == '__main__':
     cleanup_thread.daemon = True
     cleanup_thread.start()
     
-    print("🎯 Starting Multi-Page Viral Clipper Web App...")
+    # Check if database is properly configured
+    if not os.getenv('DB_PASSWORD'):
+        print("⚠️  WARNING: DB_PASSWORD not set in environment variables")
+        print("   Check your .env file")
+    
+    # Check for encryption key
+    if not os.getenv('TOKEN_ENCRYPTION_KEY'):
+        print("⚠️  WARNING: TOKEN_ENCRYPTION_KEY not set in environment variables")
+        print("   A temporary key will be generated, but this should be set in production")
+        print("   Check your .env file")
+    
+    # Run the app
+    print("🎯 Starting Multi-User Viral Clipper Web App with Anonymous Support...")
     print("🌐 Access at: http://localhost:5000")
-    print("📄 Multi-page architecture enabled")
     print("🔓 Anonymous clip generation: ENABLED")
-    print("🔐 Authentication: OPTIONAL (required for upload)")
+    print("🔐 Multi-user authentication: OPTIONAL (for upload)")
+    print("📤 YouTube upload: Requires authentication")
     
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)

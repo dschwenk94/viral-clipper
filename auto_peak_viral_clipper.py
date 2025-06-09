@@ -18,7 +18,7 @@ from dataclasses import dataclass
 # Import our systems
 from viral_clipper_complete import ViralClipGenerator as BaseClipGenerator, Speaker
 from enhanced_heuristic_peak_detector import EnhancedHeuristicPeakDetector, ViralMoment
-from ass_caption_update_system_v2 import ASSCaptionUpdateSystemV2 as ASSCaptionUpdateSystem
+from ass_caption_update_system_v5 import ASSCaptionUpdateSystemV5 as ASSCaptionUpdateSystem
 
 @dataclass
 class PhraseSegment:
@@ -176,7 +176,7 @@ class AutoPeakViralClipper(BaseClipGenerator):
             print(f"✅ Subtitle file created: {os.path.basename(subtitle_path)}")
             
             # Step 9: Burn in captions
-            print("\\n🔥 Step 9: Burning in captions...")
+            print("\\n🔥 Step 9: Burning in captions with FIXED system...")
             caption_success = self.burn_captions_into_video_debug(temp_video_path, subtitle_path, clip_path)
             
             if not caption_success:
@@ -505,12 +505,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     def update_captions_ass(self, subtitle_path: str, updated_captions: List[Dict], duration: float = 30.0) -> bool:
         """
         🆕 Update ASS captions with edited text and speaker assignments
-        Maintains proper speaker colors in pop-out effects
+        Maintains proper speaker colors in pop-out effects and video duration
         """
         try:
-            print("🔄 Updating ASS captions...")
+            print(f"🔄 Updating ASS captions for {duration:.1f}s video...")
             return self.caption_updater.update_ass_file_with_edits(
-                subtitle_path, updated_captions
+                subtitle_path, updated_captions, None, duration
             )
         except Exception as e:
             print(f"❌ Error updating ASS captions: {e}")

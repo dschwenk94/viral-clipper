@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Captions - Clippy{% endblock %}
+{% block description %}Edit and customize captions for your viral clip{% endblock %}
+
+{% block progress_indicator %}
+<div class="progress-breadcrumb">
+    <div class="breadcrumb-item completed">1. Input</div>
+    <div class="breadcrumb-separator">→</div>
+    <div class="breadcrumb-item completed">2. Processing</div>
+    <div class="breadcrumb-separator">→</div>
+    <div class="breadcrumb-item active current">3. Edit</div>
+    <div class="breadcrumb-separator">→</div>
+    <div class="breadcrumb-item">4. Upload</div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="edit-page">
+    <div class="edit-container">
+        <!-- Video Preview Panel -->
+        <div class="video-panel">
+            <div class="panel-header">
+                <h2>Preview</h2>
+                <button class="btn btn-ghost btn-sm" id="toggle-captions">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4"></path>
+                    </svg>
+                    Toggle Captions
+                </button>
+            </div>
+            
+            <div class="video-wrapper">
+                <video id="clip-video" controls class="video-player">
+                    <source id="video-source" src="" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            
+            <!-- Video Info -->
+            <div class="video-info-card">
+                <h3>Clip Details</h3>
+                <div class="video-info-grid" id="clip-details">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Caption Editor Panel -->
+        <div class="caption-panel">
+            <div class="panel-header">
+                <h2>Edit Captions</h2>
+                <p class="panel-description">Click to edit text or change speakers</p>
+            </div>
+            
+            <div class="caption-editor" id="captions-editor">
+                <!-- Captions will be loaded here -->
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="edit-actions">
+                <button class="btn btn-ghost" onclick="window.history.back()">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Back
+                </button>
+                
+                <div class="action-group">
+                    <button id="update-captions-btn" class="btn btn-secondary">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Update Video
+                    </button>
+                    
+                    <button id="continue-btn" class="btn btn-primary">
+                        Continue to Upload
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Update Progress -->
+            <div id="update-progress" class="update-progress hidden">
+                <div class="update-status">
+                    <span class="update-text">Regenerating video with new captions...</span>
+                    <div class="update-progress-bar">
+                        <div class="update-progress-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden data -->
+<input type="hidden" id="job-id" value="{{ job_id }}">
+<input type="hidden" id="clip-data" value='{{ clip_data | tojson }}'>
+{% endblock %}
+
+{% block socket %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/edit.js') }}"></script>
+{% endblock %}

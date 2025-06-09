@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Upload - Clippy{% endblock %}
+{% block description %}Upload your viral clip to YouTube or TikTok{% endblock %}
+
+{% block progress_indicator %}
+<div class="progress-breadcrumb">
+    <div class="breadcrumb-item completed">1. Input</div>
+    <div class="breadcrumb-separator">→</div>
+    <div class="breadcrumb-item completed">2. Processing</div>
+    <div class="breadcrumb-separator">→</div>
+    <div class="breadcrumb-item completed">3. Edit</div>
+    <div class="breadcrumb-separator">→</div>
+    <div class="breadcrumb-item active current">4. Upload</div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="upload-page">
+    <!-- Auth Check -->
+    <div id="auth-required" class="auth-prompt-card hidden">
+        <div class="auth-icon">
+            <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+        </div>
+        <h2>Sign in to Upload</h2>
+        <p>To upload your clip to YouTube or TikTok, you need to sign in with your Google account.</p>
+        
+        <div class="auth-benefits">
+            <h4>Benefits of signing in:</h4>
+            <ul>
+                <li>
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    Upload directly to YouTube and TikTok
+                </li>
+                <li>
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    Track your upload history
+                </li>
+                <li>
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    Save clips to your account
+                </li>
+                <li>
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                    </svg>
+                    Access clips from anywhere
+                </li>
+            </ul>
+        </div>
+        
+        <div class="auth-actions">
+            <button class="btn btn-primary btn-lg" id="signin-btn">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19.6 10.227c0-.709-.064-1.39-.182-2.045H10v3.868h5.382a4.6 4.6 0 01-1.996 3.018v2.51h3.232c1.891-1.742 2.982-4.305 2.982-7.35z" fill="#4285F4"/>
+                    <path d="M10 20c2.7 0 4.964-.895 6.618-2.423l-3.232-2.509c-.895.6-2.04.955-3.386.955-2.605 0-4.81-1.76-5.595-4.123H1.064v2.59A9.996 9.996 0 0010 20z" fill="#34A853"/>
+                    <path d="M4.405 11.9c-.2-.6-.314-1.24-.314-1.9 0-.66.114-1.3.314-1.9V5.51H1.064A9.996 9.996 0 000 10c0 1.614.386 3.14 1.064 4.49l3.34-2.59z" fill="#FBBC05"/>
+                    <path d="M10 3.977c1.468 0 2.786.505 3.823 1.496l2.868-2.868C14.959.992 12.695 0 10 0 6.09 0 2.71 2.24 1.064 5.51l3.34 2.59C5.192 5.736 7.396 3.977 10 3.977z" fill="#EA4335"/>
+                </svg>
+                Sign in with Google
+            </button>
+            <button class="btn btn-ghost" onclick="window.history.back()">
+                Back to Edit
+            </button>
+        </div>
+    </div>
+
+    <!-- Upload Interface (shown when authenticated) -->
+    <div id="upload-interface" class="upload-interface hidden">
+        <div class="upload-container">
+            <!-- Platform Selector -->
+            <div class="platform-selector-card">
+                <h2>Choose Upload Platform</h2>
+                <div class="platform-tabs">
+                    <button class="platform-tab active" data-platform="youtube">
+                        <div class="platform-icon">
+                            <svg viewBox="0 0 48 48" fill="none">
+                                <rect width="48" height="48" rx="12" fill="#FF0000"/>
+                                <path d="M20 16.5V31.5L32 24L20 16.5Z" fill="white"/>
+                            </svg>
+                        </div>
+                        <div class="platform-name">YouTube</div>
+                    </button>
+                    <button class="platform-tab" data-platform="tiktok" id="tiktok-tab">
+                        <div class="platform-icon">
+                            <svg viewBox="0 0 48 48" fill="none">
+                                <rect width="48" height="48" rx="12" fill="#000000"/>
+                                <path d="M34.145 14.695c-2.082-1.376-3.391-3.743-3.525-6.445h-5.506v21.539c-.049 2.365-1.974 4.275-4.351 4.275-2.408 0-4.361-1.951-4.361-4.359s1.953-4.359 4.361-4.359c.47 0 .921.075 1.345.213v-5.643c-.438-.061-.887-.093-1.345-.093-5.601 0-10.142 4.541-10.142 10.142S15.162 40.057 20.763 40.057c5.601 0 10.142-4.541 10.142-10.142V19.371c2.159 1.547 4.784 2.457 7.619 2.457v-5.564c-1.586 0-3.065-.459-4.309-1.249z" fill="white"/>
+                            </svg>
+                        </div>
+                        <div class="platform-name">TikTok</div>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Upload Form -->
+            <div class="upload-form-card" id="platform-upload-form">
+                <!-- Dynamic form content based on platform -->
+            </div>
+        </div>
+
+        <!-- Upload History -->
+        <div class="upload-history-section">
+            <h3>Recent Uploads</h3>
+            <div id="upload-history" class="upload-history-grid">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden data -->
+<input type="hidden" id="job-id" value="{{ job_id }}">
+{% endblock %}
+
+{% block socket %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+{% endblock %}

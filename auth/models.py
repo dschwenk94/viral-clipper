@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 from database.connection import execute_query, get_db_cursor
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -249,3 +250,134 @@ class UserSession:
         except Exception as e:
             logger.error(f"Failed to cleanup sessions: {e}")
             return 0
+
+
+class PlatformConnection:
+    """Manages platform connections for users"""
+    
+    @staticmethod
+    def create_or_update(user_id: int, platform: str, platform_user_id: str,
+                        platform_username: str = None, access_token: str = None,
+                        refresh_token: str = None, token_expires_at: datetime = None,
+                        scopes: str = None, metadata: Dict = None) -> bool:
+        """Create or update a platform connection"""
+        query = """
+        INSERT INTO platform_connections 
+        (user_id, platform, platform_user_id, platform_username, 
+         access_token, refresh_token, token_expires_at, scopes, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (user_id, platform) 
+        DO UPDATE SET 
+            platform_user_id = EXCLUDED.platform_user_id,
+            platform_username = EXCLUDED.platform_username,
+            access_token = EXCLUDED.access_token,
+            refresh_token = EXCLUDED.refresh_token,
+            token_expires_at = EXCLUDED.token_expires_at,
+            scopes = EXCLUDED.scopes,
+            metadata = EXCLUDED.metadata,
+            is_active = TRUE,
+            last_used_at = NOW()
+        RETURNING id
+        """
+        
+        try:
+            # Convert metadata dict to JSON
+            metadata_json = json.dumps(metadata) if metadata else None
+            
+            result = execute_query(
+                query, 
+                (user_id, platform, platform_user_id, platform_username,
+                 access_token, refresh_token, token_expires_at, scopes, metadata_json),
+                fetch_one=True
+            )
+            return result is not None
+        except Exception as e:
+            logger.error(f"Failed to create/update platform connection: {e}")
+            return False
+    
+    @staticmethod
+    def get_connection(user_id: int, platform: str) -> Optional[Dict]:
+        """Get a specific platform connection for a user"""
+        query = """
+        SELECT * FROM platform_connections 
+        WHERE user_id = %s AND platform = %s AND is_active = TRUE
+        """
+        
+        result = execute_query(query, (user_id, platform), fetch_one=True)
+        if result:
+            # Parse JSON metadata
+            if result.get('metadata'):
+                result['metadata'] = json.loads(result['metadata'])
+            return result
+        return None
+    
+    @staticmethod
+    def get_user_connections(user_id: int) -> list:
+        """Get all platform connections for a user"""
+        query = """
+        SELECT * FROM platform_connections 
+        WHERE user_id = %s AND is_active = TRUE
+        ORDER BY connected_at DESC
+        """
+        
+        results = execute_query(query, (user_id,))
+        
+        # Parse JSON metadata for each result
+        for result in results:
+            if result.get('metadata'):
+                result['metadata'] = json.loads(result['metadata'])
+        
+        return results
+    
+    @staticmethod
+    def update_tokens(user_id: int, platform: str, access_token: str,
+                     refresh_token: str, expires_at: datetime) -> bool:
+        """Update tokens for a platform connection"""
+        query = """
+        UPDATE platform_connections 
+        SET access_token = %s, refresh_token = %s, token_expires_at = %s,
+            last_used_at = NOW()
+        WHERE user_id = %s AND platform = %s AND is_active = TRUE
+        """
+        
+        try:
+            execute_query(
+                query,
+                (access_token, refresh_token, expires_at, user_id, platform)
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update platform tokens: {e}")
+            return False
+    
+    @staticmethod
+    def deactivate_connection(user_id: int, platform: str) -> bool:
+        """Deactivate a platform connection"""
+        query = """
+        UPDATE platform_connections 
+        SET is_active = FALSE 
+        WHERE user_id = %s AND platform = %s
+        """
+        
+        try:
+            execute_query(query, (user_id, platform))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to deactivate platform connection: {e}")
+            return False
+    
+    @staticmethod
+    def update_last_used(user_id: int, platform: str) -> bool:
+        """Update last used timestamp for a connection"""
+        query = """
+        UPDATE platform_connections 
+        SET last_used_at = NOW() 
+        WHERE user_id = %s AND platform = %s AND is_active = TRUE
+        """
+        
+        try:
+            execute_query(query, (user_id, platform))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update last used: {e}")
+            return False

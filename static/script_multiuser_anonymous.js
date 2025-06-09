@@ -31,46 +31,10 @@ class ViralClipperApp {
                 this.showAnonymousClipsNotice(result.anonymous_clips_count);
             }
             
-            // Check for recent clips after authentication
-            if (this.currentUser) {
-                this.checkForRecentClips();
-            }
-            
         } catch (error) {
             console.error('Auth check failed:', error);
             this.currentUser = null;
             this.updateAuthUI();
-        }
-    }
-    
-    async checkForRecentClips() {
-        // Check localStorage for recent job ID
-        const recentJobId = localStorage.getItem('recent_job_id');
-        if (recentJobId) {
-            try {
-                const response = await fetch(`/api/job_status/${recentJobId}`);
-                if (response.ok) {
-                    const result = await response.json();
-                    if (result.status === 'completed' && result.clip_data) {
-                        // Restore the clip
-                        this.currentJobId = recentJobId;
-                        this.currentClipData = result.clip_data;
-                        
-                        // Show notification
-                        this.showSuccess('Your clip has been restored!');
-                        
-                        // Load the editor screen
-                        this.loadClipEditor(result.clip_data, result.clip_data.captions);
-                        this.showScreen(2);
-                        
-                        // Clear from localStorage
-                        localStorage.removeItem('recent_job_id');
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to restore clip:', error);
-                localStorage.removeItem('recent_job_id');
-            }
         }
     }
 
@@ -203,10 +167,6 @@ class ViralClipperApp {
         this.socket.on('connect', () => {
             console.log('Connected to server');
         });
-        
-        this.socket.on('connected', (data) => {
-            console.log('Joined room:', data.room, 'Type:', data.type);
-        });
 
         this.socket.on('disconnect', () => {
             console.log('Disconnected from server');
@@ -286,115 +246,9 @@ class ViralClipperApp {
                 }
             }
             
-            // Also check for recent clips
-            this.loadRecentClips();
-            
         } catch (error) {
             console.error('Failed to load upload history:', error);
         }
-    }
-    
-    async loadRecentClips() {
-        try {
-            const response = await fetch('/api/user_clips');
-            if (!response.ok) return;
-            
-            const result = await response.json();
-            
-            if ((result.converted_clips && result.converted_clips.length > 0) || 
-                (result.active_clips && result.active_clips.length > 0)) {
-                
-                // Show a notice about available clips
-                const notice = document.createElement('div');
-                notice.className = 'recent-clips-notice';
-                notice.innerHTML = `
-                    <div class="notice-content">
-                        <span>🎬 You have recent clips available!</span>
-                        <button class="view-clips-btn">View Clips</button>
-                    </div>
-                `;
-                
-                const container = document.querySelector('.container');
-                const existingNotice = container.querySelector('.recent-clips-notice');
-                if (existingNotice) {
-                    existingNotice.remove();
-                }
-                container.insertBefore(notice, container.firstChild);
-                
-                notice.querySelector('.view-clips-btn').addEventListener('click', () => {
-                    this.showRecentClipsModal(result);
-                });
-            }
-            
-        } catch (error) {
-            console.error('Failed to load recent clips:', error);
-        }
-    }
-    
-    showRecentClipsModal(clipsData) {
-        // Create modal to show recent clips
-        const modal = document.createElement('div');
-        modal.className = 'clips-modal-overlay';
-        
-        let clipsHtml = '';
-        
-        // Show active clips
-        if (clipsData.active_clips && clipsData.active_clips.length > 0) {
-            clipsHtml += '<h3>Active Clips</h3>';
-            clipsData.active_clips.forEach(clip => {
-                clipsHtml += `
-                    <div class="clip-item">
-                        <span>📹 ${clip.video_url}</span>
-                        <button class="restore-clip-btn" data-job-id="${clip.job_id}">Restore</button>
-                    </div>
-                `;
-            });
-        }
-        
-        // Show converted clips
-        if (clipsData.converted_clips && clipsData.converted_clips.length > 0) {
-            clipsHtml += '<h3>Previous Clips</h3>';
-            clipsData.converted_clips.forEach(clip => {
-                const createdDate = new Date(clip.created_at).toLocaleDateString();
-                clipsHtml += `
-                    <div class="clip-item">
-                        <span>📹 ${clip.video_url}</span>
-                        <span class="clip-date">${createdDate}</span>
-                    </div>
-                `;
-            });
-        }
-        
-        modal.innerHTML = `
-            <div class="clips-modal">
-                <h2>Your Recent Clips</h2>
-                <div class="clips-list">
-                    ${clipsHtml}
-                </div>
-                <button class="close-modal-btn">Close</button>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Add event listeners
-        modal.querySelectorAll('.restore-clip-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const jobId = e.target.dataset.jobId;
-                localStorage.setItem('recent_job_id', jobId);
-                window.location.reload();
-            });
-        });
-        
-        modal.querySelector('.close-modal-btn').addEventListener('click', () => {
-            modal.remove();
-        });
-        
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
     }
 
     async generateClip() {
@@ -432,9 +286,6 @@ class ViralClipperApp {
                 if (result.is_anonymous) {
                     console.log('Generating clip anonymously');
                 }
-                
-                // Start polling as backup in case WebSocket fails
-                this.startJobPolling();
             } else {
                 this.showError(result.error || 'Failed to start clip generation');
                 this.showScreen(1);
@@ -444,45 +295,6 @@ class ViralClipperApp {
             this.showError('Network error occurred');
             this.showScreen(1);
         }
-    }
-    
-    startJobPolling() {
-        // Poll job status every 2 seconds as a backup
-        this.pollingInterval = setInterval(async () => {
-            if (!this.currentJobId) {
-                clearInterval(this.pollingInterval);
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/job_status/${this.currentJobId}`);
-                const result = await response.json();
-                
-                if (response.ok) {
-                    console.log('Job status:', result.status, result.progress + '%');
-                    
-                    this.updateProgress({
-                        job_id: this.currentJobId,
-                        status: result.status,
-                        progress: result.progress,
-                        message: result.message
-                    });
-                    
-                    if (result.status === 'completed' && result.clip_data) {
-                        clearInterval(this.pollingInterval);
-                        this.handleClipCompleted({
-                            job_id: this.currentJobId,
-                            clip_data: result.clip_data,
-                            captions: result.clip_data.captions
-                        });
-                    } else if (result.status === 'error') {
-                        clearInterval(this.pollingInterval);
-                    }
-                }
-            } catch (error) {
-                console.error('Polling error:', error);
-            }
-        }, 2000);
     }
 
     continueToUpload() {
@@ -674,12 +486,6 @@ class ViralClipperApp {
 
     handleClipCompleted(data) {
         this.currentClipData = data.clip_data;
-        
-        // Save job ID to localStorage in case of page refresh/auth redirect
-        if (this.currentJobId) {
-            localStorage.setItem('recent_job_id', this.currentJobId);
-        }
-        
         this.loadClipEditor(data.clip_data, data.captions);
         this.showScreen(2);
     }

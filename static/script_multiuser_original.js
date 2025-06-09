@@ -1,5 +1,5 @@
-// 🎯 Viral Clipper JavaScript - MULTI-USER VERSION WITH ANONYMOUS SUPPORT
-// Allows clip generation without authentication, prompts for auth only on upload
+// 🎯 Viral Clipper JavaScript - MULTI-USER VERSION
+// Includes authentication flow and user-specific features
 
 class ViralClipperApp {
     constructor() {
@@ -8,7 +8,6 @@ class ViralClipperApp {
         this.currentClipData = null;
         this.currentScreen = 1;
         this.currentUser = null;
-        this.sessionId = null;
         
         this.checkAuthStatus();
         this.initializeEventListeners();
@@ -21,56 +20,12 @@ class ViralClipperApp {
             const result = await response.json();
             
             this.currentUser = result.authenticated ? result.user : null;
-            this.sessionId = result.session_id;
-            
-            // Update UI but don't force authentication
             this.updateAuthUI();
-            
-            // Show anonymous clips count if not authenticated
-            if (!this.currentUser && result.anonymous_clips_count > 0) {
-                this.showAnonymousClipsNotice(result.anonymous_clips_count);
-            }
-            
-            // Check for recent clips after authentication
-            if (this.currentUser) {
-                this.checkForRecentClips();
-            }
             
         } catch (error) {
             console.error('Auth check failed:', error);
             this.currentUser = null;
             this.updateAuthUI();
-        }
-    }
-    
-    async checkForRecentClips() {
-        // Check localStorage for recent job ID
-        const recentJobId = localStorage.getItem('recent_job_id');
-        if (recentJobId) {
-            try {
-                const response = await fetch(`/api/job_status/${recentJobId}`);
-                if (response.ok) {
-                    const result = await response.json();
-                    if (result.status === 'completed' && result.clip_data) {
-                        // Restore the clip
-                        this.currentJobId = recentJobId;
-                        this.currentClipData = result.clip_data;
-                        
-                        // Show notification
-                        this.showSuccess('Your clip has been restored!');
-                        
-                        // Load the editor screen
-                        this.loadClipEditor(result.clip_data, result.clip_data.captions);
-                        this.showScreen(2);
-                        
-                        // Clear from localStorage
-                        localStorage.removeItem('recent_job_id');
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to restore clip:', error);
-                localStorage.removeItem('recent_job_id');
-            }
         }
     }
 
@@ -79,12 +34,12 @@ class ViralClipperApp {
         const mainApp = document.getElementById('main-app');
         const userInfo = document.getElementById('user-info');
         
-        // Always show main app - authentication is optional
-        authSection.style.display = 'none';
-        mainApp.style.display = 'block';
-        
         if (this.currentUser) {
-            // User is authenticated - show profile
+            // User is authenticated
+            authSection.style.display = 'none';
+            mainApp.style.display = 'block';
+            
+            // Show user info
             userInfo.innerHTML = `
                 <div class="user-profile">
                     ${this.currentUser.picture_url ? 
@@ -99,48 +54,25 @@ class ViralClipperApp {
             // Add logout listener
             document.getElementById('logout-btn').addEventListener('click', () => this.logout());
             
-            // Load upload history
+            // Check upload history
             this.loadUploadHistory();
             
         } else {
-            // User is not authenticated - show sign in button
-            userInfo.innerHTML = `
-                <button class="google-signin-btn compact" id="header-signin-btn">
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M17.64 9.20454C17.64 8.56636 17.5827 7.95272 17.4764 7.36363H9V10.845H13.8436C13.635 11.97 13.0009 12.9231 12.0477 13.5613V15.8195H14.9564C16.6582 14.2527 17.64 11.9454 17.64 9.20454Z" fill="white"/>
-                        <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 9 14.4204C6.65591 14.4204 4.67182 12.8372 3.96409 10.71H0.957275V13.0418C2.43818 15.9831 5.48182 18 9 18Z" fill="white"/>
-                        <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="white"/>
-                        <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="white"/>
-                    </svg>
-                    Sign in
-                </button>
-            `;
-            
-            // Add sign in listener
-            document.getElementById('header-signin-btn').addEventListener('click', () => this.signInWithGoogle());
+            // User needs to authenticate
+            authSection.style.display = 'block';
+            mainApp.style.display = 'none';
+            userInfo.innerHTML = '';
         }
     }
 
-    showAnonymousClipsNotice(count) {
-        const notice = document.createElement('div');
-        notice.className = 'anonymous-clips-notice';
-        notice.innerHTML = `
-            <div class="notice-content">
-                <span>💡 You have ${count} unsaved clip${count > 1 ? 's' : ''}. Sign in to save them to your account!</span>
-                <button class="sign-in-link">Sign in now</button>
-            </div>
-        `;
-        
-        const container = document.querySelector('.container');
-        container.insertBefore(notice, container.firstChild);
-        
-        notice.querySelector('.sign-in-link').addEventListener('click', () => {
-            this.signInWithGoogle();
-        });
-    }
-
     initializeEventListeners() {
-        // Form submission - no auth required
+        // Authentication
+        const googleSignInBtn = document.getElementById('google-signin-btn');
+        if (googleSignInBtn) {
+            googleSignInBtn.addEventListener('click', () => this.signInWithGoogle());
+        }
+
+        // Form submission
         document.getElementById('clipForm').addEventListener('submit', (e) => {
             e.preventDefault();
             this.generateClip();
@@ -148,7 +80,7 @@ class ViralClipperApp {
 
         // Navigation buttons
         document.getElementById('continue-to-upload-btn').addEventListener('click', () => {
-            this.continueToUpload();
+            this.showScreen(3);
         });
 
         document.getElementById('back-to-edit-btn').addEventListener('click', () => {
@@ -164,7 +96,7 @@ class ViralClipperApp {
             this.updateCaptions();
         });
 
-        // Upload - requires auth
+        // Upload
         document.getElementById('upload-btn').addEventListener('click', () => {
             this.uploadToYouTube();
         });
@@ -203,10 +135,6 @@ class ViralClipperApp {
         this.socket.on('connect', () => {
             console.log('Connected to server');
         });
-        
-        this.socket.on('connected', (data) => {
-            console.log('Joined room:', data.room, 'Type:', data.type);
-        });
 
         this.socket.on('disconnect', () => {
             console.log('Disconnected from server');
@@ -244,11 +172,6 @@ class ViralClipperApp {
                 this.currentUser = null;
                 this.updateAuthUI();
                 this.showSuccess('Logged out successfully');
-                
-                // Reload to reset state
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1000);
             }
             
         } catch (error) {
@@ -286,119 +209,17 @@ class ViralClipperApp {
                 }
             }
             
-            // Also check for recent clips
-            this.loadRecentClips();
-            
         } catch (error) {
             console.error('Failed to load upload history:', error);
         }
     }
-    
-    async loadRecentClips() {
-        try {
-            const response = await fetch('/api/user_clips');
-            if (!response.ok) return;
-            
-            const result = await response.json();
-            
-            if ((result.converted_clips && result.converted_clips.length > 0) || 
-                (result.active_clips && result.active_clips.length > 0)) {
-                
-                // Show a notice about available clips
-                const notice = document.createElement('div');
-                notice.className = 'recent-clips-notice';
-                notice.innerHTML = `
-                    <div class="notice-content">
-                        <span>🎬 You have recent clips available!</span>
-                        <button class="view-clips-btn">View Clips</button>
-                    </div>
-                `;
-                
-                const container = document.querySelector('.container');
-                const existingNotice = container.querySelector('.recent-clips-notice');
-                if (existingNotice) {
-                    existingNotice.remove();
-                }
-                container.insertBefore(notice, container.firstChild);
-                
-                notice.querySelector('.view-clips-btn').addEventListener('click', () => {
-                    this.showRecentClipsModal(result);
-                });
-            }
-            
-        } catch (error) {
-            console.error('Failed to load recent clips:', error);
-        }
-    }
-    
-    showRecentClipsModal(clipsData) {
-        // Create modal to show recent clips
-        const modal = document.createElement('div');
-        modal.className = 'clips-modal-overlay';
-        
-        let clipsHtml = '';
-        
-        // Show active clips
-        if (clipsData.active_clips && clipsData.active_clips.length > 0) {
-            clipsHtml += '<h3>Active Clips</h3>';
-            clipsData.active_clips.forEach(clip => {
-                clipsHtml += `
-                    <div class="clip-item">
-                        <span>📹 ${clip.video_url}</span>
-                        <button class="restore-clip-btn" data-job-id="${clip.job_id}">Restore</button>
-                    </div>
-                `;
-            });
-        }
-        
-        // Show converted clips
-        if (clipsData.converted_clips && clipsData.converted_clips.length > 0) {
-            clipsHtml += '<h3>Previous Clips</h3>';
-            clipsData.converted_clips.forEach(clip => {
-                const createdDate = new Date(clip.created_at).toLocaleDateString();
-                clipsHtml += `
-                    <div class="clip-item">
-                        <span>📹 ${clip.video_url}</span>
-                        <span class="clip-date">${createdDate}</span>
-                    </div>
-                `;
-            });
-        }
-        
-        modal.innerHTML = `
-            <div class="clips-modal">
-                <h2>Your Recent Clips</h2>
-                <div class="clips-list">
-                    ${clipsHtml}
-                </div>
-                <button class="close-modal-btn">Close</button>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Add event listeners
-        modal.querySelectorAll('.restore-clip-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const jobId = e.target.dataset.jobId;
-                localStorage.setItem('recent_job_id', jobId);
-                window.location.reload();
-            });
-        });
-        
-        modal.querySelector('.close-modal-btn').addEventListener('click', () => {
-            modal.remove();
-        });
-        
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
-    }
 
     async generateClip() {
-        // No authentication check - anyone can generate clips
+        if (!this.currentUser) {
+            this.showError('Please sign in to generate clips');
+            return;
+        }
+
         const formData = new FormData(document.getElementById('clipForm'));
         const data = {
             url: formData.get('url'),
@@ -428,13 +249,6 @@ class ViralClipperApp {
             if (response.ok) {
                 this.currentJobId = result.job_id;
                 console.log('Clip generation started:', result.job_id);
-                
-                if (result.is_anonymous) {
-                    console.log('Generating clip anonymously');
-                }
-                
-                // Start polling as backup in case WebSocket fails
-                this.startJobPolling();
             } else {
                 this.showError(result.error || 'Failed to start clip generation');
                 this.showScreen(1);
@@ -444,109 +258,6 @@ class ViralClipperApp {
             this.showError('Network error occurred');
             this.showScreen(1);
         }
-    }
-    
-    startJobPolling() {
-        // Poll job status every 2 seconds as a backup
-        this.pollingInterval = setInterval(async () => {
-            if (!this.currentJobId) {
-                clearInterval(this.pollingInterval);
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/job_status/${this.currentJobId}`);
-                const result = await response.json();
-                
-                if (response.ok) {
-                    console.log('Job status:', result.status, result.progress + '%');
-                    
-                    this.updateProgress({
-                        job_id: this.currentJobId,
-                        status: result.status,
-                        progress: result.progress,
-                        message: result.message
-                    });
-                    
-                    if (result.status === 'completed' && result.clip_data) {
-                        clearInterval(this.pollingInterval);
-                        this.handleClipCompleted({
-                            job_id: this.currentJobId,
-                            clip_data: result.clip_data,
-                            captions: result.clip_data.captions
-                        });
-                    } else if (result.status === 'error') {
-                        clearInterval(this.pollingInterval);
-                    }
-                }
-            } catch (error) {
-                console.error('Polling error:', error);
-            }
-        }, 2000);
-    }
-
-    continueToUpload() {
-        // Check if user is authenticated before showing upload screen
-        if (!this.currentUser) {
-            this.showAuthPrompt();
-        } else {
-            this.showScreen(3);
-        }
-    }
-
-    showAuthPrompt() {
-        // Create a custom auth prompt overlay
-        const authPrompt = document.createElement('div');
-        authPrompt.className = 'auth-prompt-overlay';
-        authPrompt.innerHTML = `
-            <div class="auth-prompt-modal">
-                <h2>Sign in to Upload</h2>
-                <p>To upload your clip to YouTube, you need to sign in with your Google account.</p>
-                
-                <div class="auth-benefits">
-                    <h4>Benefits of signing in:</h4>
-                    <ul>
-                        <li>📤 Upload directly to your YouTube channel</li>
-                        <li>📊 Track your upload history</li>
-                        <li>💾 Save your clips to your account</li>
-                        <li>🔄 Access your clips from anywhere</li>
-                    </ul>
-                </div>
-                
-                <div class="auth-prompt-actions">
-                    <button class="google-signin-btn" id="auth-prompt-signin">
-                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M17.64 9.20454C17.64 8.56636 17.5827 7.95272 17.4764 7.36363H9V10.845H13.8436C13.635 11.97 13.0009 12.9231 12.0477 13.5613V15.8195H14.9564C16.6582 14.2527 17.64 11.9454 17.64 9.20454Z" fill="white"/>
-                            <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 9 14.4204C6.65591 14.4204 4.67182 12.8372 3.96409 10.71H0.957275V13.0418C2.43818 15.9831 5.48182 18 9 18Z" fill="white"/>
-                            <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.59318 3.68182 9C3.68182 8.40682 3.78409 7.83 3.96409 7.29V4.95818H0.957275C0.347727 6.17318 0 7.54773 0 9C0 10.4523 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="white"/>
-                            <path d="M9 3.57955C10.3214 3.57955 11.5077 4.03364 12.4405 4.92545L15.0218 2.34409C13.4632 0.891818 11.4259 0 9 0C5.48182 0 2.43818 2.01682 0.957275 4.95818L3.96409 7.29C4.67182 5.16273 6.65591 3.57955 9 3.57955Z" fill="white"/>
-                        </svg>
-                        Sign in with Google
-                    </button>
-                    <button class="action-btn secondary" id="auth-prompt-cancel">
-                        Stay on Edit Screen
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(authPrompt);
-        
-        // Add event listeners
-        document.getElementById('auth-prompt-signin').addEventListener('click', () => {
-            this.signInWithGoogle();
-        });
-        
-        document.getElementById('auth-prompt-cancel').addEventListener('click', () => {
-            authPrompt.remove();
-        });
-        
-        // Close on background click
-        authPrompt.addEventListener('click', (e) => {
-            if (e.target === authPrompt) {
-                authPrompt.remove();
-            }
-        });
     }
 
     validateInputs(data) {
@@ -674,12 +385,6 @@ class ViralClipperApp {
 
     handleClipCompleted(data) {
         this.currentClipData = data.clip_data;
-        
-        // Save job ID to localStorage in case of page refresh/auth redirect
-        if (this.currentJobId) {
-            localStorage.setItem('recent_job_id', this.currentJobId);
-        }
-        
         this.loadClipEditor(data.clip_data, data.captions);
         this.showScreen(2);
     }
@@ -834,12 +539,6 @@ class ViralClipperApp {
     }
 
     async uploadToYouTube() {
-        // Check authentication first
-        if (!this.currentUser) {
-            this.showAuthPrompt();
-            return;
-        }
-
         const title = document.getElementById('video-title').value.trim();
         const description = document.getElementById('video-description').value.trim();
         const privacyStatus = document.querySelector('input[name="privacy-status"]:checked').value;
@@ -886,13 +585,6 @@ class ViralClipperApp {
             } else {
                 uploadStatus.className = 'upload-status error';
                 uploadStatus.innerHTML = `❌ ${result.error}`;
-                
-                // If auth error, show auth prompt
-                if (response.status === 401 || response.status === 403) {
-                    setTimeout(() => {
-                        this.showAuthPrompt();
-                    }, 1500);
-                }
             }
         } catch (error) {
             console.error('Upload error:', error);

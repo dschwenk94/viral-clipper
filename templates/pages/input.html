@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Clippy - Create Viral Clips from YouTube Videos{% endblock %}
+{% block description %}Transform any YouTube video into engaging viral clips with AI-powered moment detection. Perfect for creating YouTube Shorts and TikTok content.{% endblock %}
+
+{% block content %}
+<div class="input-page">
+    <div class="hero-section">
+        <h2 class="hero-title">Create Your Viral Clip</h2>
+        <p class="hero-subtitle">Enter a YouTube URL and let AI find the perfect moment</p>
+    </div>
+
+    <div class="card main-card">
+        <form id="clipForm" action="/api/generate_clip" method="POST">
+            <!-- YouTube URL Input -->
+            <div class="form-group">
+                <label class="form-label" for="youtube-url">YouTube Video URL</label>
+                <input type="url" 
+                       id="youtube-url" 
+                       name="url" 
+                       class="form-input form-input-lg" 
+                       placeholder="https://www.youtube.com/watch?v=..." 
+                       required
+                       autofocus>
+                <div class="form-hint">Paste any YouTube video URL to get started</div>
+            </div>
+
+            <!-- Time Selection Section -->
+            <div class="time-input-section">
+                <div class="time-input-header">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <h3 class="time-input-title">Manual Time Selection (Optional)</h3>
+                </div>
+                
+                <div class="time-input-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="start-time">Start Time</label>
+                        <input type="text" 
+                               id="start-time" 
+                               name="start_time" 
+                               class="form-input" 
+                               placeholder="2:30 or 150">
+                        <div class="form-hint">Format: MM:SS or seconds</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="end-time">End Time</label>
+                        <input type="text" 
+                               id="end-time" 
+                               name="end_time" 
+                               class="form-input" 
+                               placeholder="3:00 or 180">
+                        <div class="form-hint">Leave blank to use duration</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clip Duration -->
+            <div class="form-group">
+                <label class="form-label" for="duration">Clip Duration (seconds)</label>
+                <div class="duration-slider">
+                    <input type="range" 
+                           id="duration-slider" 
+                           min="10" 
+                           max="60" 
+                           value="30" 
+                           class="slider">
+                    <input type="number" 
+                           id="duration" 
+                           name="duration" 
+                           class="form-input duration-input" 
+                           value="30" 
+                           min="10" 
+                           max="60" 
+                           required>
+                </div>
+                <div class="form-hint">Recommended: 30-45 seconds for maximum engagement</div>
+            </div>
+
+            <!-- Generate Button -->
+            <button type="submit" class="btn btn-primary btn-lg btn-full">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                Generate Viral Clip
+            </button>
+        </form>
+    </div>
+
+    <!-- AI Features Info -->
+    <div class="features-section">
+        <h3 class="features-title">AI Auto-Detection Features</h3>
+        <p class="features-subtitle">When no manual time is specified, our AI analyzes:</p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                    </svg>
+                </div>
+                <h4>Audio Energy Analysis</h4>
+                <p>Identifies high-energy moments and speech patterns</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                    </svg>
+                </div>
+                <h4>Multi-Speaker Detection</h4>
+                <p>Recognizes different speakers and conversation dynamics</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    </svg>
+                </div>
+                <h4>Engagement Optimization</h4>
+                <p>Finds moments with highest viral potential</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+                    </svg>
+                </div>
+                <h4>Auto Captions</h4>
+                <p>Generates accurate, styled captions automatically</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity (if logged in) -->
+    <div id="recent-activity" class="recent-activity hidden">
+        <!-- Populated by JavaScript if user is logged in -->
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/input.js') }}"></script>
+{% endblock %}

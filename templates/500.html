@@ -1,20 +1,21 @@
 {% extends "base.html" %}
 
-{% block title %}Authentication Error - Clippy{% endblock %}
-{% block description %}Authentication failed{% endblock %}
+{% block title %}Server Error - Clippy{% endblock %}
+{% block description %}Something went wrong{% endblock %}
 
 {% block content %}
 <div class="error-page">
     <div class="error-container">
         <div class="error-icon">
             <svg width="120" height="120" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
         </div>
         
-        <h1 class="error-title">Authentication Error</h1>
+        <h1 class="error-title">500</h1>
+        <h2 class="error-subtitle">Server Error</h2>
         <p class="error-description">
-            {{ error or 'There was a problem signing you in. Please try again.' }}
+            Something went wrong on our end. Please try again later.
         </p>
         
         <div class="error-actions">
@@ -44,14 +45,23 @@
 
 .error-icon {
     margin-bottom: var(--space-xl);
-    color: var(--color-warning);
+    color: var(--color-error);
     opacity: 0.5;
 }
 
 .error-title {
+    font-size: 6rem;
+    font-weight: 700;
+    margin-bottom: var(--space-sm);
+    background: linear-gradient(135deg, var(--color-error) 0%, var(--color-warning) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.error-subtitle {
     font-size: var(--text-2xl);
     font-weight: 600;
-    margin-bottom: var(--space-lg);
+    margin-bottom: var(--space-md);
 }
 
 .error-description {
