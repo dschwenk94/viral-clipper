@@ -1,249 +1,78 @@
 #!/usr/bin/env python3
 """
-🎯 VIRAL CLIPPER WEB APP 🎯 - FIXED VERSION WITH OAUTH
-Flask web application for the viral clip generator with:
-1. Refresh button maintaining state
-2. Pop-out effect color consistency
-3. Full YouTube OAuth integration and upload
+🎯 VIRAL CLIPPER WEB APP - MULTI-PAGE VERSION 🎯
+Flask web application with multi-user OAuth support and multi-page architecture
 """
 
-from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, url_for
+# Load environment variables first
+from dotenv import load_dotenv
+load_dotenv()
+
+# For local development, allow OAuth over HTTP
+import os
+if os.getenv('FLASK_ENV') == 'development':
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, url_for, g
 from flask_socketio import SocketIO, emit
 import os
 import json
 import uuid
 import threading
 import time
-import pickle
-from datetime import datetime
+from datetime import datetime, timedelta
+import psycopg2.extras
+
+# Import our modules
 from auto_peak_viral_clipper import AutoPeakViralClipper
 from caption_fragment_fix import merge_fragmented_captions
-from ass_caption_update_system_v2 import ASSCaptionUpdateSystemV2
+from ass_caption_update_system_v6 import ASSCaptionUpdateSystemV6 as ASSCaptionUpdateSystem
 
-# OAuth imports
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+# Import auth modules
+from auth import login_required, get_current_user, OAuthManager, User
+from auth.decorators import youtube_service_required, logout_user
+from database import init_db, get_db_connection
 
+# TikTok imports
+from auth.multi_platform_oauth import multi_platform_oauth
+from auth.tiktok.api_client import TikTokAPIClient
+
+# Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'viral_clipper_secret_key_2025'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'viral_clipper_secret_key_2025')
+app.config['PERMANENT_SESSION_LIFETIME'] = 604800  # 7 days in seconds
+
+# Database configuration
+app.config['DB_HOST'] = os.getenv('DB_HOST', 'localhost')
+app.config['DB_PORT'] = os.getenv('DB_PORT', 5432)
+app.config['DB_NAME'] = os.getenv('DB_NAME', 'clippy')
+app.config['DB_USER'] = os.getenv('DB_USER', 'clippy_user')
+app.config['DB_PASSWORD'] = os.getenv('DB_PASSWORD', 'clippy_password')
+
+# Initialize database
+init_db(app)
+
+# Initialize SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize the clipper with ASS captions
 clipper = AutoPeakViralClipper()
 
-# Store active jobs
+# Initialize OAuth manager
+oauth_manager = OAuthManager()
+
+# Store active jobs (now per user or session)
 active_jobs = {}
 
-# OAuth configuration
-OAUTH_SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
-CREDENTIALS_FILE = 'client_secrets.json'
-TOKEN_FILE = 'token.pickle'
-
-# Global OAuth service
-youtube_upload_service = None
-oauth_credentials = None
-
-# OAuth Helper Functions
-def check_oauth_status():
-    """Check if OAuth credentials are valid"""
-    global oauth_credentials, youtube_upload_service
-    
-    try:
-        creds = None
-        
-        # Load existing credentials
-        if os.path.exists(TOKEN_FILE):
-            with open(TOKEN_FILE, 'rb') as token:
-                creds = pickle.load(token)
-        
-        # Check if credentials are valid
-        if creds and creds.valid:
-            oauth_credentials = creds
-            youtube_upload_service = build('youtube', 'v3', credentials=creds)
-            return {
-                'authenticated': True,
-                'status': 'valid',
-                'message': 'OAuth credentials are valid'
-            }
-        elif creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-                oauth_credentials = creds
-                youtube_upload_service = build('youtube', 'v3', credentials=creds)
-                
-                # Save refreshed credentials
-                with open(TOKEN_FILE, 'wb') as token:
-                    pickle.dump(creds, token)
-                
-                return {
-                    'authenticated': True,
-                    'status': 'refreshed',
-                    'message': 'OAuth credentials refreshed successfully'
-                }
-            except Exception as e:
-                return {
-                    'authenticated': False,
-                    'status': 'expired',
-                    'message': f'Failed to refresh credentials: {str(e)}'
-                }
-        else:
-            return {
-                'authenticated': False,
-                'status': 'missing',
-                'message': 'No valid OAuth credentials found'
-            }
-            
-    except Exception as e:
-        return {
-            'authenticated': False,
-            'status': 'error',
-            'message': f'OAuth check failed: {str(e)}'
-        }
-
-def initiate_oauth_flow():
-    """Start OAuth authentication flow"""
-    try:
-        if not os.path.exists(CREDENTIALS_FILE):
-            return {
-                'success': False,
-                'error': 'OAuth credentials file not found. Please ensure client_secrets.json exists.'
-            }
-        
-        flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, OAUTH_SCOPES)
-        
-        # Run local server for OAuth callback
-        creds = flow.run_local_server(
-            port=0,
-            prompt='consent',
-            open_browser=True
-        )
-        
-        if creds:
-            # Save credentials
-            with open(TOKEN_FILE, 'wb') as token:
-                pickle.dump(creds, token)
-            
-            # Update global variables
-            global oauth_credentials, youtube_upload_service
-            oauth_credentials = creds
-            youtube_upload_service = build('youtube', 'v3', credentials=creds)
-            
-            return {
-                'success': True,
-                'message': 'OAuth authentication successful!'
-            }
-        else:
-            return {
-                'success': False,
-                'error': 'OAuth authentication failed'
-            }
-            
-    except Exception as e:
-        return {
-            'success': False,
-            'error': f'OAuth flow error: {str(e)}'
-        }
-
-def upload_video_to_youtube(video_path, title, description, privacy_status='private'):
-    """Upload video to YouTube using OAuth credentials"""
-    global youtube_upload_service
-    
-    if not youtube_upload_service:
-        return {
-            'success': False,
-            'error': 'YouTube service not authenticated. Please authenticate first.'
-        }
-    
-    try:
-        # Prepare video metadata
-        tags = ['Shorts', 'Viral', 'Clips', 'AI', 'AutoGenerated']
-        
-        body = {
-            'snippet': {
-                'title': title[:100],  # YouTube title limit
-                'description': f"{description}\n\n#Shorts"[:5000],  # Description limit
-                'tags': tags,
-                'categoryId': '22',  # People & Blogs
-                'defaultLanguage': 'en',
-                'defaultAudioLanguage': 'en'
-            },
-            'status': {
-                'privacyStatus': privacy_status,
-                'selfDeclaredMadeForKids': False,
-                'madeForKids': False
-            }
-        }
-        
-        # Create upload media
-        media = MediaFileUpload(
-            video_path,
-            chunksize=-1,
-            resumable=True,
-            mimetype='video/*'
-        )
-        
-        # Execute upload
-        insert_request = youtube_upload_service.videos().insert(
-            part=','.join(body.keys()),
-            body=body,
-            media_body=media
-        )
-        
-        response = resumable_upload_with_progress(insert_request)
-        
-        if response and 'id' in response:
-            video_id = response['id']
-            return {
-                'success': True,
-                'video_id': video_id,
-                'url': f'https://www.youtube.com/watch?v={video_id}',
-                'message': f'Successfully uploaded: {title}'
-            }
-        else:
-            return {
-                'success': False,
-                'error': 'Upload completed but no video ID returned'
-            }
-            
-    except Exception as e:
-        return {
-            'success': False,
-            'error': f'Upload failed: {str(e)}'
-        }
-
-def resumable_upload_with_progress(insert_request):
-    """Handle resumable upload with progress tracking"""
-    response = None
-    error = None
-    retry = 0
-    
-    while response is None:
-        try:
-            status, response = insert_request.next_chunk()
-            if status:
-                progress = int(status.progress() * 100)
-                print(f"Upload progress: {progress}%")
-                # Could emit socket event here for real-time progress
-                
-        except Exception as e:
-            error = e
-            if retry < 3:
-                retry += 1
-                print(f"Upload error, retrying ({retry}/3): {error}")
-                time.sleep(2 ** retry)
-            else:
-                print(f"Upload failed after 3 retries: {error}")
-                break
-    
-    return response
+import logging
+logger = logging.getLogger(__name__)
 
 class ClipJob:
     """Represents a clip generation job"""
-    def __init__(self, job_id, url, duration, start_time=None, end_time=None):
+    def __init__(self, job_id, user_id, session_id, url, duration, start_time=None, end_time=None):
         self.job_id = job_id
+        self.user_id = user_id  # Can be None for anonymous users
+        self.session_id = session_id  # Always present
         self.url = url
         self.duration = duration
         self.start_time = start_time
@@ -251,13 +80,88 @@ class ClipJob:
         self.status = "starting"
         self.progress = 0
         self.message = "Initializing..."
-        self.clip_data = None
+        self.clip_data = {}  # Initialize as empty dict instead of None
         self.error = None
         self.created_at = datetime.now()
-        # 🆕 Hybrid approach fields
-        self.regeneration_status = None  # 'processing', 'completed', 'failed'
+        self.regeneration_status = None
         self.regeneration_progress = 0
         self.regeneration_job_id = None
+        self.is_anonymous = user_id is None
+
+
+def get_or_create_session_id():
+    """Get existing session ID or create a new one"""
+    if 'session_id' not in session:
+        session['session_id'] = str(uuid.uuid4())
+        session.permanent = True
+    return session['session_id']
+
+
+def save_anonymous_clip(job):
+    """Save anonymous clip to database"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('''
+            INSERT INTO anonymous_clips 
+            (session_id, job_id, video_url, clip_path, clip_data)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (job_id) DO UPDATE SET
+                clip_path = EXCLUDED.clip_path,
+                clip_data = EXCLUDED.clip_data
+        ''', (
+            job.session_id,
+            job.job_id,
+            job.url,
+            job.clip_data.get('path') if job.clip_data else None,
+            json.dumps(job.clip_data) if job.clip_data else None
+        ))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_anonymous_clips(session_id):
+    """Get anonymous clips for a session"""
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    try:
+        cur.execute('''
+            SELECT * FROM anonymous_clips 
+            WHERE session_id = %s 
+            AND expires_at > CURRENT_TIMESTAMP
+            ORDER BY created_at DESC
+            LIMIT 10
+        ''', (session_id,))
+        
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def convert_anonymous_clips_to_user(session_id, user_id):
+    """Convert anonymous clips to user clips when they sign in"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('''
+            UPDATE anonymous_clips 
+            SET converted_to_user_id = %s, converted_at = CURRENT_TIMESTAMP
+            WHERE session_id = %s 
+            AND converted_to_user_id IS NULL
+        ''', (user_id, session_id))
+        
+        conn.commit()
+        return cur.rowcount
+    finally:
+        cur.close()
+        conn.close()
+
 
 def update_job_progress(job_id, status, progress, message):
     """Update job progress and emit to frontend"""
@@ -267,12 +171,14 @@ def update_job_progress(job_id, status, progress, message):
         job.progress = progress
         job.message = message
         
+        # Emit to job-specific room
         socketio.emit('progress_update', {
             'job_id': job_id,
             'status': status,
             'progress': progress,
             'message': message
-        })
+        }, room=job_id)
+
 
 def process_clip_generation(job_id):
     """Background thread for clip generation"""
@@ -283,12 +189,10 @@ def process_clip_generation(job_id):
         
         # Calculate actual start time for processing
         if job.start_time is not None and job.end_time is not None:
-            # Manual time selection
             actual_start_time = job.start_time
             actual_duration = job.end_time - job.start_time
             update_job_progress(job_id, "processing", 10, "Using manual time selection...")
         else:
-            # Auto-detection
             actual_start_time = None
             actual_duration = job.duration
             update_job_progress(job_id, "processing", 10, "Using auto-detection...")
@@ -296,25 +200,35 @@ def process_clip_generation(job_id):
         update_job_progress(job_id, "processing", 20, "Downloading video...")
         
         # Generate the clip
+        logger.info(f"Generating clip for job {job_id} with URL: {job.url}, duration: {actual_duration}, start: {actual_start_time}")
+        
         clip_data = clipper.generate_auto_peak_viral_clip(
             video_url=job.url,
             duration=actual_duration,
             manual_start_time=actual_start_time
         )
         
+        logger.info(f"Clip generation result for job {job_id}: {type(clip_data)}, has data: {bool(clip_data)}")
+        
         if clip_data:
+            logger.info(f"Clip data keys: {list(clip_data.keys())}")
             job.clip_data = clip_data
             update_job_progress(job_id, "completed", 100, "Clip generated successfully!")
             
             # Extract caption data for editing
             caption_data = extract_caption_data(clip_data)
             job.clip_data['captions'] = caption_data
+            logger.info(f"Added {len(caption_data)} captions to clip data")
+            
+            # Save anonymous clip to database if anonymous
+            if job.is_anonymous:
+                save_anonymous_clip(job)
             
             socketio.emit('clip_completed', {
                 'job_id': job_id,
-                'clip_data': clip_data,
+                'clip_data': job.clip_data,  # Use job.clip_data which includes captions
                 'captions': caption_data
-            })
+            }, room=job_id)
         else:
             job.error = "Clip generation failed"
             update_job_progress(job_id, "error", 0, "Clip generation failed")
@@ -323,195 +237,195 @@ def process_clip_generation(job_id):
         job.error = str(e)
         update_job_progress(job_id, "error", 0, f"Error: {str(e)}")
 
-def extract_caption_data(clip_data):
-    """🔧 FIXED: Extract caption data from both SRT and ASS files"""
-    print("🔧 CAPTION EXTRACTION: Starting caption extraction...")
-    
-    subtitle_file = clip_data.get('subtitle_file')
-    if not subtitle_file:
-        print("❌ No subtitle_file in clip_data")
-        print(f"📊 Available clip_data keys: {list(clip_data.keys())}")
-        return []
-    
-    print(f"📁 Subtitle file path: {subtitle_file}")
-    
-    if not os.path.exists(subtitle_file):
-        print(f"❌ Subtitle file does not exist: {subtitle_file}")
-        
-        # Try to find subtitle files in the clips directory
-        video_path = clip_data.get('path', '')
-        if video_path:
-            base_name = os.path.splitext(video_path)[0]
-            
-            # Try different subtitle file extensions
-            for ext in ['.srt', '.ass']:
-                potential_subtitle = base_name + '_captions' + ext
-                print(f"🔍 Checking for: {potential_subtitle}")
-                if os.path.exists(potential_subtitle):
-                    print(f"✅ Found subtitle file: {potential_subtitle}")
-                    subtitle_file = potential_subtitle
-                    break
-            else:
-                print("❌ No subtitle files found")
-                return []
-        else:
-            print("❌ No video path in clip_data")
-            return []
-    
-    print(f"📝 Processing subtitle file: {os.path.basename(subtitle_file)}")
-    
-    # Determine file type and extract accordingly
-    if subtitle_file.endswith('.srt'):
-        print("🎯 Extracting from SRT file...")
-        captions = extract_captions_from_srt_fixed(subtitle_file)
-    elif subtitle_file.endswith('.ass'):
-        print("🎯 Extracting from ASS file...")
-        captions = extract_captions_from_ass_fixed(subtitle_file)
-    else:
-        print(f"❌ Unknown subtitle format: {subtitle_file}")
-        return []
-    
-    if not captions:
-        print("❌ No captions extracted")
-        return []
-    
-    # Convert to web app format
-    web_captions = []
-    for i, caption in enumerate(captions):
-        web_caption = {
-            'index': i,
-            'text': caption.get('text', '').strip(),
-            'speaker': caption.get('speaker', 'Speaker 1'),
-            'start_time': caption.get('start_time', '0:00:00.00'),
-            'end_time': caption.get('end_time', '0:00:00.00')
-        }
-        web_captions.append(web_caption)
-        print(f"   {i+1}. {web_caption['speaker']}: '{web_caption['text'][:40]}{'...' if len(web_caption['text']) > 40 else ''}'")
-    
-    print(f"✅ Successfully extracted {len(web_captions)} captions for web app")
-    return web_captions
 
-def extract_captions_from_srt_fixed(srt_file_path: str):
-    """🔧 FIXED: Extract captions from SRT file"""
-    captions = []
-    
-    try:
-        print(f"   📖 Reading SRT file: {os.path.basename(srt_file_path)}")
-        
-        with open(srt_file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        print(f"   📄 File size: {len(content)} characters")
-        
-        # Parse SRT format - handle both \\n\\n and real newlines
-        content = content.replace('\\n', '\n')  # Fix escaped newlines
-        subtitle_blocks = content.strip().split('\n\n')
-        
-        print(f"   🔢 Found {len(subtitle_blocks)} subtitle blocks")
-        
-        for i, block in enumerate(subtitle_blocks):
-            lines = block.strip().split('\n')
-            if len(lines) >= 3:
-                try:
-                    index = int(lines[0])
-                    timing = lines[1]
-                    text = '\n'.join(lines[2:])
-                    
-                    # Parse timing (HH:MM:SS,mmm --> HH:MM:SS,mmm)
-                    if ' --> ' in timing:
-                        start_time_str, end_time_str = timing.split(' --> ')
-                        
-                        # Extract speaker if present
-                        speaker = 'Speaker 1'
-                        if text.startswith('[') and '] ' in text:
-                            speaker_end = text.find('] ')
-                            speaker = text[1:speaker_end]
-                            text = text[speaker_end + 2:]
-                        
-                        captions.append({
-                            'text': text.strip(),
-                            'speaker': speaker,
-                            'start_time': start_time_str.strip(),
-                            'end_time': end_time_str.strip(),
-                            'index': index
-                        })
-                        
-                except Exception as e:
-                    print(f"   ⚠️ Skipping malformed block {i}: {e}")
-                    continue
-        
-        print(f"   ✅ Extracted {len(captions)} captions from SRT")
-        return captions
-        
-    except Exception as e:
-        print(f"   ❌ Error reading SRT file: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
-
-def extract_captions_from_ass_fixed(ass_file_path: str):
-    """🔧 FIXED: Extract captions from ASS file"""
-    captions = []
-    
-    try:
-        print(f"   📖 Reading ASS file: {os.path.basename(ass_file_path)}")
-        
-        with open(ass_file_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        
-        print(f"   📄 File has {len(lines)} lines")
-        
-        # Find dialogue lines
-        dialogue_count = 0
-        for line in lines:
-            line = line.strip()
-            if line.startswith('Dialogue:'):
-                dialogue_count += 1
-                try:
-                    # Parse ASS dialogue format:
-                    # Dialogue: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
-                    parts = line.split(',', 9)
-                    if len(parts) >= 10:
-                        start_time = parts[1]
-                        end_time = parts[2]
-                        speaker = parts[3] if parts[3] else 'Speaker 1'
-                        text = parts[9]
-                        
-                        # Clean up text (remove ASS formatting codes)
-                        import re
-                        text = re.sub(r'{[^}]*}', '', text)  # Remove {formatting}
-                        text = text.strip()
-                        
-                        if text:  # Only add non-empty captions
-                            captions.append({
-                                'text': text,
-                                'speaker': speaker,
-                                'start_time': start_time,
-                                'end_time': end_time,
-                                'index': len(captions)
-                            })
-                            
-                except Exception as e:
-                    print(f"   ⚠️ Error parsing dialogue line: {e}")
-                    continue
-        
-        print(f"   📊 Found {dialogue_count} dialogue lines, extracted {len(captions)} valid captions")
-        return captions
-        
-    except Exception as e:
-        print(f"   ❌ Error reading ASS file: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
+# ==================== PAGE ROUTES ====================
 
 @app.route('/')
 def index():
-    """Main page"""
-    return render_template('index.html')
+    """Home page - Input form"""
+    return render_template('pages/input.html')
+
+@app.route('/process')
+def process_page():
+    """Processing page - Shows progress"""
+    job_id = request.args.get('job_id')
+    if not job_id:
+        return redirect(url_for('index'))
+    return render_template('pages/process.html', job_id=job_id)
+
+@app.route('/edit')
+def edit_page():
+    """Edit captions page"""
+    job_id = request.args.get('job_id')
+    if not job_id:
+        return redirect(url_for('index'))
+    
+    # Get job data
+    user = get_current_user()
+    session_id = get_or_create_session_id()
+    
+    if job_id not in active_jobs:
+        return redirect(url_for('index'))
+    
+    job = active_jobs[job_id]
+    
+    # Check authorization
+    if job.user_id:
+        if not user or job.user_id != user.id:
+            return redirect(url_for('index'))
+    else:
+        if job.session_id != session_id:
+            return redirect(url_for('index'))
+    
+    # Check if job is completed
+    if job.status != 'completed':
+        # If not completed, redirect back to processing page
+        logger.warning(f"Job {job_id} not completed, status: {job.status}")
+        return redirect(url_for('process_page', job_id=job_id))
+    
+    if not job.clip_data:
+        logger.error(f"Job {job_id} is completed but has no clip_data")
+        # Try to refresh the clip data
+        if hasattr(job, 'refresh_clip_data'):
+            job.refresh_clip_data()
+        
+        if not job.clip_data:
+            # Still no data, show error
+            return render_template('pages/edit.html', 
+                                 job_id=job_id, 
+                                 clip_data={},
+                                 error="Clip data not found. Please try regenerating the clip.")
+    
+    # Get clip data
+    clip_data = job.clip_data
+    
+    # Log the clip data for debugging
+    logger.info(f"Edit page - Job ID: {job_id}, Clip data keys: {list(clip_data.keys()) if clip_data else 'None'}")
+    if clip_data:
+        logger.info(f"Full clip_data: {json.dumps(clip_data, indent=2)}")
+        if 'path' in clip_data:
+            logger.info(f"Clip path: {clip_data['path']}")
+        if 'captions' in clip_data:
+            logger.info(f"Number of captions: {len(clip_data['captions'])}")
+    else:
+        logger.error(f"No clip data for job {job_id}")
+    
+    return render_template('pages/edit.html', 
+                         job_id=job_id, 
+                         clip_data=clip_data)
+
+@app.route('/upload')
+@login_required
+def upload_page():
+    """Upload page - Requires authentication"""
+    job_id = request.args.get('job_id')
+    if not job_id:
+        return redirect(url_for('index'))
+    
+    # Verify user owns this clip
+    user = get_current_user()
+    
+    if job_id not in active_jobs:
+        return redirect(url_for('index'))
+    
+    job = active_jobs[job_id]
+    
+    # For anonymous jobs, convert them to user jobs
+    if job.is_anonymous:
+        job.user_id = user.id
+        job.is_anonymous = False
+        convert_anonymous_clips_to_user(job.session_id, user.id)
+    elif job.user_id != user.id:
+        return redirect(url_for('index'))
+    
+    return render_template('pages/upload.html', job_id=job_id)
+
+
+# ==================== AUTH ROUTES ====================
+
+@app.route('/api/auth/login')
+def auth_login():
+    """Initiate OAuth login flow"""
+    # Store the current session ID to convert anonymous clips later
+    session['pre_auth_session_id'] = get_or_create_session_id()
+    
+    redirect_uri = url_for('auth_callback', _external=True)
+    authorization_url, state = oauth_manager.get_authorization_url(redirect_uri)
+    
+    # Store state in session for CSRF protection
+    session['oauth_state'] = state
+    
+    return jsonify({
+        'authorization_url': authorization_url,
+        'status': 'redirect_required'
+    })
+
+
+@app.route('/api/auth/callback')
+def auth_callback():
+    """Handle OAuth callback"""
+    # Verify state
+    state = request.args.get('state')
+    stored_state = session.pop('oauth_state', None)
+    
+    if not state or state != stored_state:
+        return render_template('auth_error.html', error='Invalid state parameter')
+    
+    # Handle the callback
+    redirect_uri = url_for('auth_callback', _external=True)
+    user = oauth_manager.handle_oauth_callback(
+        request.url, state, redirect_uri
+    )
+    
+    if user:
+        # Convert anonymous clips to user clips
+        pre_auth_session_id = session.get('pre_auth_session_id')
+        if pre_auth_session_id:
+            converted_count = convert_anonymous_clips_to_user(pre_auth_session_id, user.id)
+            print(f"Converted {converted_count} anonymous clips to user {user.email}")
+        
+        # Redirect to home page with success indicator
+        return redirect(url_for('index', auth='success'))
+    else:
+        return render_template('auth_error.html', error='Authentication failed')
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    """Logout user"""
+    logout_user()
+    return jsonify({'status': 'success', 'message': 'Logged out successfully'})
+
+
+@app.route('/api/auth/status')
+def auth_status():
+    """Check authentication status"""
+    user = get_current_user()
+    session_id = get_or_create_session_id()
+    
+    response_data = {
+        'authenticated': user is not None,
+        'session_id': session_id
+    }
+    
+    if user:
+        response_data['user'] = user.to_dict()
+    
+    # Check for anonymous clips
+    if not user:
+        anonymous_clips = get_anonymous_clips(session_id)
+        response_data['anonymous_clips_count'] = len(anonymous_clips)
+    
+    return jsonify(response_data)
+
+
+# ==================== API ROUTES ====================
 
 @app.route('/api/generate_clip', methods=['POST'])
 def generate_clip():
-    """Start clip generation process"""
+    """Start clip generation process - NO AUTHENTICATION REQUIRED"""
+    user = get_current_user()  # May be None
+    session_id = get_or_create_session_id()
     data = request.json
     
     # Validate input
@@ -531,7 +445,8 @@ def generate_clip():
     
     # Create job
     job_id = str(uuid.uuid4())
-    job = ClipJob(job_id, url, duration, start_time, end_time)
+    user_id = user.id if user else None
+    job = ClipJob(job_id, user_id, session_id, url, duration, start_time, end_time)
     active_jobs[job_id] = job
     
     # Start background processing
@@ -539,186 +454,158 @@ def generate_clip():
     thread.daemon = True
     thread.start()
     
-    return jsonify({'job_id': job_id, 'status': 'started'})
+    return jsonify({
+        'job_id': job_id, 
+        'status': 'started',
+        'is_anonymous': user_id is None
+    })
+
 
 @app.route('/api/job_status/<job_id>')
 def job_status(job_id):
-    """Get job status"""
+    """Get job status - accessible by session or user"""
+    user = get_current_user()
+    session_id = get_or_create_session_id()
+    
     if job_id not in active_jobs:
         return jsonify({'error': 'Job not found'}), 404
     
     job = active_jobs[job_id]
+    
+    # Check authorization
+    if job.user_id:
+        # User job - must match user
+        if not user or job.user_id != user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+    else:
+        # Anonymous job - must match session
+        if job.session_id != session_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+    
     return jsonify({
         'job_id': job_id,
         'status': job.status,
         'progress': job.progress,
         'message': job.message,
         'clip_data': job.clip_data,
-        'error': job.error
+        'error': job.error,
+        'is_anonymous': job.is_anonymous
     })
 
-@app.route('/api/regeneration_status/<job_id>')
-def regeneration_status(job_id):
-    """Get regeneration status for a job"""
-    if job_id not in active_jobs:
-        return jsonify({'error': 'Job not found'}), 404
+
+@app.route('/api/user_activity')
+@login_required
+def user_activity():
+    """Get user's recent activity"""
+    user = get_current_user()
     
-    job = active_jobs[job_id]
+    # Get user's recent clips
+    recent_clips = []
+    for job_id, job in active_jobs.items():
+        if job.user_id == user.id and job.status == 'completed':
+            recent_clips.append({
+                'job_id': job_id,
+                'original_title': job.clip_data.get('original_title', 'Untitled') if job.clip_data else 'Untitled',
+                'duration': job.clip_data.get('duration', 30) if job.clip_data else 30,
+                'created_at': job.created_at.isoformat()
+            })
+    
+    # Sort by date
+    recent_clips.sort(key=lambda x: x['created_at'], reverse=True)
+    
     return jsonify({
-        'job_id': job_id,
-        'regeneration_status': job.regeneration_status,
-        'regeneration_progress': job.regeneration_progress,
-        'video_path': job.clip_data['path'] if job.clip_data else None
+        'recent_clips': recent_clips[:10]
     })
 
-@app.route('/api/back_to_input', methods=['POST'])
-def back_to_input():
-    """Go back to input screen and clear current job"""
+
+@app.route('/api/update_captions', methods=['POST'])
+def update_captions():
+    """Update captions - accessible by session or user"""
+    user = get_current_user()
+    session_id = get_or_create_session_id()
     data = request.json
     job_id = data.get('job_id')
+    captions = data.get('captions', [])
     
-    if job_id in active_jobs:
-        # Clean up the job
-        del active_jobs[job_id]
-    
-    return jsonify({'status': 'success', 'message': 'Returned to input screen'})
-
-# 🆕 NEW: Clear all jobs endpoint
-@app.route('/api/clear_all_jobs', methods=['POST'])
-def clear_all_jobs():
-    """Clear all active jobs and reset application state"""
-    global active_jobs
-    
-    try:
-        # Clear all active jobs
-        job_count = len(active_jobs)
-        active_jobs.clear()
-        
-        print(f"🧺 Cleared {job_count} active jobs")
-        
-        return jsonify({
-            'status': 'success', 
-            'message': f'Cleared {job_count} active jobs',
-            'jobs_cleared': job_count
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to clear jobs: {str(e)}'}), 500
-
-# 🆕 NEW: Get application state endpoint
-@app.route('/api/app_state')
-def get_app_state():
-    """Get current application state for debugging"""
-    try:
-        state = {
-            'active_jobs_count': len(active_jobs),
-            'active_job_ids': list(active_jobs.keys()),
-            'active_job_urls': {job_id: job.url for job_id, job in active_jobs.items()}
-        }
-        
-        return jsonify(state)
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to get app state: {str(e)}'}), 500
-
-# 🔧 FIX #1: New endpoint for refreshing video while staying on caption screen
-@app.route('/api/refresh_video/<job_id>')
-def refresh_video(job_id):
-    """Refresh video data without changing screens"""
     if job_id not in active_jobs:
         return jsonify({'error': 'Job not found'}), 404
     
     job = active_jobs[job_id]
+    
+    # Check authorization
+    if job.user_id:
+        if not user or job.user_id != user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+    else:
+        if job.session_id != session_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+    
     if not job.clip_data:
         return jsonify({'error': 'No clip data available'}), 400
     
-    # Re-extract caption data to get latest updates
-    caption_data = extract_caption_data(job.clip_data)
-    job.clip_data['captions'] = caption_data
-    
-    # Add cache-busting timestamp to video URL
-    video_path = job.clip_data['path']
-    filename = os.path.basename(video_path)
-    cache_buster = str(int(time.time()))
-    
-    return jsonify({
-        'status': 'success',
-        'clip_data': job.clip_data,
-        'captions': caption_data,
-        'video_url': f"/clips/{filename}?v={cache_buster}",
-        'message': 'Video data refreshed successfully'
-    })
-
-# OAuth API Endpoints
-@app.route('/api/oauth/status')
-def oauth_status():
-    """Check OAuth authentication status"""
-    status = check_oauth_status()
-    return jsonify(status)
-
-@app.route('/api/oauth/authenticate', methods=['POST'])
-def oauth_authenticate():
-    """Start OAuth authentication flow"""
     try:
-        result = initiate_oauth_flow()
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Authentication failed: {str(e)}'
-        }), 500
-
-@app.route('/api/oauth/revoke', methods=['POST'])
-def oauth_revoke():
-    """Revoke OAuth credentials"""
-    try:
-        global oauth_credentials, youtube_upload_service
+        # Preprocess captions to fix fragmentation
+        avg_text_length = sum(len(c.get('text', '')) for c in captions) / len(captions) if captions else 0
         
-        # Remove token file
-        if os.path.exists(TOKEN_FILE):
-            os.remove(TOKEN_FILE)
+        if avg_text_length < 5:
+            captions = merge_fragmented_captions(captions)
         
-        # Clear global variables
-        oauth_credentials = None
-        youtube_upload_service = None
+        # Create regeneration job ID
+        regen_job_id = f"regen_{str(uuid.uuid4())[:8]}"
+        job.regeneration_job_id = regen_job_id
+        
+        # Start background regeneration
+        regeneration_thread = threading.Thread(
+            target=regenerate_video_background_ass, 
+            args=(job_id, captions)
+        )
+        regeneration_thread.daemon = True
+        regeneration_thread.start()
         
         return jsonify({
-            'success': True,
-            'message': 'OAuth credentials revoked successfully'
+            'status': 'success', 
+            'message': 'Caption update started',
+            'regeneration_job_id': regen_job_id
         })
         
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Failed to revoke credentials: {str(e)}'
-        }), 500
+        return jsonify({'error': f'Failed to start caption update: {str(e)}'}), 500
+
 
 @app.route('/api/upload_to_youtube', methods=['POST'])
+@youtube_service_required
 def upload_to_youtube():
-    """Upload clip to YouTube using OAuth"""
+    """Upload clip to YouTube - REQUIRES AUTHENTICATION"""
+    user = get_current_user()
+    youtube_service = g.youtube_service
+    
     data = request.json
     job_id = data.get('job_id')
     title = data.get('title', '').strip()
     description = data.get('description', '').strip()
-    privacy_status = data.get('privacy_status', 'private')  # private, unlisted, public
+    privacy_status = data.get('privacy_status', 'private')
     
     if job_id not in active_jobs:
         return jsonify({'error': 'Job not found'}), 404
     
     job = active_jobs[job_id]
+    
+    # For anonymous jobs, convert them to user jobs upon upload
+    if job.is_anonymous:
+        # Update job ownership
+        job.user_id = user.id
+        job.is_anonymous = False
+        
+        # Convert in database
+        convert_anonymous_clips_to_user(job.session_id, user.id)
+    elif job.user_id != user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
     if not job.clip_data:
         return jsonify({'error': 'No clip available for upload'}), 400
     
     if not title:
         return jsonify({'error': 'Title is required'}), 400
-    
-    # Check OAuth status first
-    oauth_status = check_oauth_status()
-    if not oauth_status['authenticated']:
-        return jsonify({
-            'error': 'YouTube authentication required',
-            'oauth_status': oauth_status
-        }), 401
     
     try:
         video_path = job.clip_data['path']
@@ -727,100 +614,141 @@ def upload_to_youtube():
             return jsonify({'error': 'Video file not found'}), 404
         
         # Upload to YouTube
-        upload_result = upload_video_to_youtube(
-            video_path=video_path,
-            title=title,
-            description=description,
-            privacy_status=privacy_status
+        from googleapiclient.http import MediaFileUpload
+        
+        body = {
+            'snippet': {
+                'title': title[:100],
+                'description': f"{description}\n\n#Shorts"[:5000],
+                'tags': ['Shorts', 'Viral', 'Clips', 'AI', 'AutoGenerated'],
+                'categoryId': '22',
+            },
+            'status': {
+                'privacyStatus': privacy_status,
+                'selfDeclaredMadeForKids': False,
+            }
+        }
+        
+        media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
+        
+        insert_request = youtube_service.videos().insert(
+            part=','.join(body.keys()),
+            body=body,
+            media_body=media
         )
         
-        if upload_result['success']:
-            # Update job data with upload info
-            job.clip_data['youtube_upload'] = {
-                'video_id': upload_result['video_id'],
-                'url': upload_result['url'],
-                'uploaded_at': datetime.now().isoformat(),
-                'title': title,
-                'privacy_status': privacy_status
-            }
+        response = None
+        error = None
+        retry = 0
+        
+        while response is None:
+            try:
+                status, response = insert_request.next_chunk()
+                if status:
+                    progress = int(status.progress() * 100)
+                    socketio.emit('upload_progress', {
+                        'job_id': job_id,
+                        'progress': progress
+                    }, room=f"user_{user.id}")
+                    
+            except Exception as e:
+                error = e
+                if retry < 3:
+                    retry += 1
+                    time.sleep(2 ** retry)
+                else:
+                    raise
+        
+        if response and 'id' in response:
+            video_id = response['id']
+            video_url = f'https://www.youtube.com/watch?v={video_id}'
+            
+            # Save upload history
+            user.add_upload_history(
+                video_id=video_id,
+                video_title=title,
+                video_url=video_url,
+                status='completed'
+            )
             
             return jsonify({
                 'status': 'success',
-                'message': upload_result['message'],
-                'video_id': upload_result['video_id'],
-                'url': upload_result['url'],
-                'privacy_status': privacy_status
+                'video_id': video_id,
+                'url': video_url,
+                'message': f'Successfully uploaded: {title}'
             })
         else:
             return jsonify({
-                'error': upload_result['error']
+                'error': 'Upload completed but no video ID returned'
             }), 500
-        
+            
     except Exception as e:
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+
+@app.route('/api/upload_history')
+def get_upload_history():
+    """Get user's upload history - only for authenticated users"""
+    user = get_current_user()
+    
+    if not user:
+        return jsonify({'uploads': []})
+    
+    history = user.get_upload_history(limit=20)
+    
+    return jsonify({
+        'uploads': [
+            {
+                'video_id': item['video_id'],
+                'title': item['video_title'],
+                'url': item['video_url'],
+                'uploaded_at': item['uploaded_at'].isoformat() if item['uploaded_at'] else None,
+                'status': item['upload_status']
+            }
+            for item in history
+        ]
+    })
+
+
+# ==================== STATIC FILE ROUTES ====================
 
 @app.route('/clips/<filename>')
 def serve_clip(filename):
     """Serve video clips"""
-    return send_from_directory('clips', filename)
+    response = send_from_directory('clips', filename)
+    
+    # Add headers for video files
+    if filename.endswith('.mp4'):
+        response.headers['Content-Type'] = 'video/mp4'
+        response.headers['Accept-Ranges'] = 'bytes'
+    elif filename.endswith('.ass'):
+        response.headers['Content-Type'] = 'text/plain; charset=utf-8'
+    
+    return response
 
-@app.route('/api/test_upload', methods=['POST'])
-def test_upload():
-    """Test YouTube upload credentials without actually uploading"""
-    try:
-        oauth_status = check_oauth_status()
-        
-        if not oauth_status['authenticated']:
-            return jsonify({
-                'success': False,
-                'error': 'Not authenticated',
-                'oauth_status': oauth_status
-            })
-        
-        # Test API access by getting channel info
-        if youtube_upload_service:
-            try:
-                channels_response = youtube_upload_service.channels().list(
-                    part='snippet',
-                    mine=True
-                ).execute()
-                
-                if channels_response.get('items'):
-                    channel = channels_response['items'][0]['snippet']
-                    return jsonify({
-                        'success': True,
-                        'message': 'YouTube API access confirmed',
-                        'channel_title': channel.get('title', 'Unknown'),
-                        'oauth_status': oauth_status
-                    })
-                else:
-                    return jsonify({
-                        'success': False,
-                        'error': 'No channel found for authenticated user'
-                    })
-                    
-            except Exception as e:
-                return jsonify({
-                    'success': False,
-                    'error': f'API test failed: {str(e)}'
-                })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'YouTube service not initialized'
-            })
-            
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Test failed: {str(e)}'
-        }), 500
 
-def format_seconds_to_mmss(seconds):
-    """Convert seconds to MM:SS format"""
-    minutes = int(seconds // 60)
-    secs = int(seconds % 60)
-    return f"{minutes}:{secs:02d}"
+# ==================== WEBSOCKET EVENTS ====================
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    # Get job_id from query params if available
+    from flask_socketio import join_room
+    
+    job_id = request.args.get('job_id')
+    if job_id:
+        join_room(job_id)
+        emit('connected', {'room': job_id, 'type': 'job'})
+        print(f'Client connected to job room: {job_id}')
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    print('Client disconnected')
+
+
+# ==================== HELPER FUNCTIONS ====================
 
 def parse_time_to_seconds(time_str):
     """Convert MM:SS or seconds to seconds"""
@@ -830,7 +758,6 @@ def parse_time_to_seconds(time_str):
     time_str = str(time_str).strip()
     
     if ':' in time_str:
-        # MM:SS format
         parts = time_str.split(':')
         if len(parts) == 2:
             try:
@@ -840,7 +767,6 @@ def parse_time_to_seconds(time_str):
             except ValueError:
                 return None
     else:
-        # Just seconds
         try:
             return float(time_str)
         except ValueError:
@@ -848,25 +774,126 @@ def parse_time_to_seconds(time_str):
     
     return None
 
+
+def extract_caption_data(clip_data):
+    """Extract caption data from subtitle files"""
+    subtitle_file = clip_data.get('subtitle_file')
+    if not subtitle_file or not os.path.exists(subtitle_file):
+        return []
+    
+    if subtitle_file.endswith('.srt'):
+        return extract_captions_from_srt_fixed(subtitle_file)
+    elif subtitle_file.endswith('.ass'):
+        return extract_captions_from_ass_fixed(subtitle_file)
+    
+    return []
+
+
+def extract_captions_from_srt_fixed(srt_file_path: str):
+    """Extract captions from SRT file"""
+    captions = []
+    
+    try:
+        with open(srt_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        content = content.replace('\\n', '\n')
+        subtitle_blocks = content.strip().split('\n\n')
+        
+        for block in subtitle_blocks:
+            lines = block.strip().split('\n')
+            if len(lines) >= 3:
+                try:
+                    index = int(lines[0])
+                    timing = lines[1]
+                    text = '\n'.join(lines[2:])
+                    
+                    if ' --> ' in timing:
+                        start_time_str, end_time_str = timing.split(' --> ')
+                        
+                        speaker = 'Speaker 1'
+                        if text.startswith('[') and '] ' in text:
+                            speaker_end = text.find('] ')
+                            speaker = text[1:speaker_end]
+                            text = text[speaker_end + 2:]
+                        
+                        captions.append({
+                            'text': text.strip(),
+                            'speaker': speaker,
+                            'start_time': start_time_str.strip(),
+                            'end_time': end_time_str.strip(),
+                            'index': index
+                        })
+                        
+                except Exception:
+                    continue
+        
+        return captions
+        
+    except Exception as e:
+        print(f"Error reading SRT file: {e}")
+        return []
+
+
+def extract_captions_from_ass_fixed(ass_file_path: str):
+    """Extract captions from ASS file"""
+    captions = []
+    
+    try:
+        with open(ass_file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith('Dialogue:'):
+                try:
+                    parts = line.split(',', 9)
+                    if len(parts) >= 10:
+                        start_time = parts[1]
+                        end_time = parts[2]
+                        speaker = parts[3] if parts[3] else 'Speaker 1'
+                        text = parts[9]
+                        
+                        import re
+                        text = re.sub(r'{[^}]*}', '', text)
+                        text = text.strip()
+                        
+                        if text:
+                            captions.append({
+                                'text': text,
+                                'speaker': speaker,
+                                'start_time': start_time,
+                                'end_time': end_time,
+                                'index': len(captions)
+                            })
+                            
+                except Exception:
+                    continue
+        
+        return captions
+        
+    except Exception as e:
+        print(f"Error reading ASS file: {e}")
+        return []
+
+
 def regenerate_video_background_ass(job_id, updated_captions):
-    """🆕 ASS: Background thread for video regeneration using ASS caption system"""
+    """Background thread for video regeneration using ASS caption system"""
     try:
         job = active_jobs[job_id]
         original_clip_data = job.clip_data
         
-        # Update regeneration status
         job.regeneration_status = 'processing'
         job.regeneration_progress = 10
         
-        # Emit progress update
         socketio.emit('regeneration_update', {
             'job_id': job_id,
+            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 10,
-            'message': '🎯 ASS: Creating captions using ASS system...'
-        })
+            'message': 'Creating captions using ASS system...'
+        }, room=job_id)
         
-        # Step 1: Get paths
         subtitle_file = original_clip_data.get('subtitle_file')
         original_video_path = original_clip_data['path']
         
@@ -876,13 +903,15 @@ def regenerate_video_background_ass(job_id, updated_captions):
         job.regeneration_progress = 30
         socketio.emit('regeneration_update', {
             'job_id': job_id,
+            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 30,
-            'message': '📝 Using ASS caption system...'
-        })
+            'message': f'Synchronizing {len(updated_captions)} captions with original speech timing...'
+        }, room=job_id)
         
-        # Step 2: Use ASS caption system to update captions
-        success = clipper.update_captions_ass(subtitle_file, updated_captions)
+        # CRITICAL FIX: Use the video duration for proper caption distribution
+        video_duration = job.duration if hasattr(job, 'duration') else 30.0
+        success = clipper.update_captions_ass(subtitle_file, updated_captions, video_duration)
         
         if not success:
             raise Exception('Failed to update captions using ASS system')
@@ -890,44 +919,35 @@ def regenerate_video_background_ass(job_id, updated_captions):
         job.regeneration_progress = 50
         socketio.emit('regeneration_update', {
             'job_id': job_id,
+            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 50,
-            'message': '🎬 Creating video with updated captions...'
-        })
+            'message': f'Speech-synchronized captions created - burning into video...'
+        }, room=job_id)
         
-        # Step 3: Create video with updated ASS captions
         temp_ass_path = original_video_path.replace('.mp4', '_ASS_temp.mp4')
-        
-        # CRITICAL: We need the video WITHOUT captions
-        # Look for the original switching video (before captions were added)
         base_video_path = original_video_path.replace('.mp4', '_temp_switching.mp4')
         
-        # If the temp switching video doesn't exist, try other options
         if not os.path.exists(base_video_path):
-            # Try looking for a backup without captions
             no_caption_path = original_video_path.replace('.mp4', '_no_captions.mp4')
             if os.path.exists(no_caption_path):
                 base_video_path = no_caption_path
             else:
-                # As a last resort, we'd need to recreate the video without captions
-                # For now, log a warning
-                print("⚠️ WARNING: Cannot find video without captions!")
-                print("⚠️ This will result in overlapping captions.")
                 base_video_path = original_video_path
         
         job.regeneration_progress = 70
         socketio.emit('regeneration_update', {
             'job_id': job_id,
+            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 70,
-            'message': '🔥 Burning ASS captions into video...'
-        })
+            'message': 'Burning ASS captions into video...'
+        }, room=job_id)
         
-        # Step 4: Burn updated ASS captions
         success = clipper.burn_captions_into_video_debug(
-            base_video_path,  # Use the video WITHOUT captions
-            subtitle_file,    # Updated subtitle file
-            temp_ass_path     # New output
+            base_video_path,
+            subtitle_file,
+            temp_ass_path
         )
         
         if not success:
@@ -936,40 +956,38 @@ def regenerate_video_background_ass(job_id, updated_captions):
         job.regeneration_progress = 90
         socketio.emit('regeneration_update', {
             'job_id': job_id,
+            'regeneration_job_id': job.regeneration_job_id,
             'status': 'processing',
             'progress': 90,
-            'message': '✅ Finalizing ASS caption video...'
-        })
+            'message': 'Finalizing video...'
+        }, room=job_id)
         
-        # Step 5: Replace original with updated version
         if os.path.exists(original_video_path):
             os.remove(original_video_path)
-            print(f"🗑️ Removed old video: {os.path.basename(original_video_path)}")
         
         os.rename(temp_ass_path, original_video_path)
-        print(f"✅ Replaced with ASS caption video: {os.path.basename(original_video_path)}")
         
-        # Step 6: Update job data
         job.clip_data['updated_at'] = datetime.now().isoformat()
         job.clip_data['caption_updates'] = len(updated_captions)
         job.clip_data['ass_captions_applied'] = True
         
-        # Complete regeneration
+        # Update anonymous clip in database if needed
+        if job.is_anonymous:
+            save_anonymous_clip(job)
+        
         job.regeneration_status = 'completed'
         job.regeneration_progress = 100
         
         socketio.emit('regeneration_complete', {
             'job_id': job_id,
+            'regeneration_job_id': job.regeneration_job_id,
             'status': 'completed',
             'progress': 100,
-            'message': '🎉 ASS: Video updated with captions!',
-            'updated_path': original_video_path
-        })
-        
-        print(f"🎉 ASS: Video regeneration completed for job {job_id} using ASS system!")
+            'message': f'Video updated with speech-synchronized captions!'
+        }, room=job_id)
         
     except Exception as e:
-        print(f"❌ ASS video regeneration failed for job {job_id}: {e}")
+        print(f"Video regeneration failed for job {job_id}: {e}")
         
         if job_id in active_jobs:
             job = active_jobs[job_id]
@@ -978,272 +996,230 @@ def regenerate_video_background_ass(job_id, updated_captions):
             
             socketio.emit('regeneration_error', {
                 'job_id': job_id,
+                'regeneration_job_id': job.regeneration_job_id,
                 'status': 'failed',
-                'error': f'ASS regeneration failed: {str(e)}'
-            })
+                'error': str(e)
+            }, room=job_id)
 
-# 🔧 FIX #2: Fixed ASS file creation with proper pop-out effect colors
-def create_updated_ass_file_fixed(original_subtitle_path, updated_captions):
-    """🔧 FIXED: Create updated ASS file without caption overlaps"""
-    try:
-        print(f"🔧 FIXING OVERLAPS: Creating clean ASS file from {os.path.basename(original_subtitle_path)}")
-        
-        # Read original ASS file
-        with open(original_subtitle_path, 'r', encoding='utf-8') as f:
-            ass_lines = f.readlines()
-        
-        # Parse the ASS file structure to preserve header and styles
-        header_lines = []
-        styles_section = []
-        events_start_idx = -1
-        format_line_idx = -1
-        
-        for i, line in enumerate(ass_lines):
-            line_stripped = line.strip()
-            
-            if line_stripped == '[Events]':
-                events_start_idx = i
-                header_lines.append(line)
-                continue
-            elif line_stripped.startswith('Format:') and events_start_idx != -1:
-                format_line_idx = i
-                header_lines.append(line)
-                break  # Stop after format line
-            elif line_stripped.startswith('Style:'):
-                styles_section.append(line_stripped)
-                header_lines.append(line)
-            elif events_start_idx == -1:  # Before [Events] section
-                header_lines.append(line)
-        
-        if events_start_idx == -1 or format_line_idx == -1:
-            raise Exception('Could not find [Events] section or Format line in ASS file')
-        
-        # Extract speaker colors from styles
-        speaker_colors = parse_speaker_colors_from_styles(styles_section)
-        print(f"🎨 Extracted speaker colors: {speaker_colors}")
-        
-        # Sort updated captions by index to maintain order
-        sorted_captions = sorted(updated_captions, key=lambda x: x.get('index', 0))
-        print(f"📝 Processing {len(sorted_captions)} updated captions in order")
-        
-        # Create NEW dialogue lines with NON-OVERLAPPING timing
-        new_dialogue_lines = []
-        
-        # Calculate timing parameters
-        caption_duration = 1.8    # Each caption shows for 1.8 seconds
-        gap_duration = 0.2        # 0.2 second gap between captions
-        
-        for i, caption in enumerate(sorted_captions):
-            speaker_name = caption.get('speaker', 'Speaker 1')
-            text = caption.get('text', '').strip()
-            
-            if not text:  # Skip empty captions
-                continue
-            
-            # Calculate NON-OVERLAPPING timing - this is the key fix!
-            start_time = i * (caption_duration + gap_duration)
-            end_time = start_time + caption_duration
-            
-            # Format timing for ASS (H:MM:SS.CC format)
-            start_ass = seconds_to_ass_time_fixed(start_time)
-            end_ass = seconds_to_ass_time_fixed(end_time)
-            
-            # Get speaker color
-            speaker_color = speaker_colors.get(speaker_name, "&H000045FF")
-            
-            # Create CLEAN pop-out effect without escaping issues
-            pop_effect = r"{\fad(150,100)\t(0,300,\fscx110\fscy110)\t(300,400,\fscx100\fscy100)\c" + speaker_color + r"}"
-            
-            # Format viral words cleanly
-            formatted_text = format_viral_words_clean_fixed(text, speaker_color)
-            
-            # Create dialogue line with proper formatting
-            dialogue_line = f"Dialogue: 0,{start_ass},{end_ass},{speaker_name},,0,0,0,,{pop_effect}{formatted_text}\n"
-            new_dialogue_lines.append(dialogue_line)
-            
-            print(f"✏️  Caption {i+1}: {speaker_name} ({start_ass}-{end_ass}) -> '{text[:30]}{'...' if len(text) > 30 else ''}'")
-        
-        # Build complete new ASS file
-        new_ass_content = "".join(header_lines)
-        new_ass_content += "".join(new_dialogue_lines)
-        
-        # Write updated ASS file with clear naming
-        updated_subtitle_path = original_subtitle_path.replace('.ass', '_CLEAN_FIXED.ass')
-        
-        with open(updated_subtitle_path, 'w', encoding='utf-8') as f:
-            f.write(new_ass_content)
-        
-        print(f"✅ FIXED: Created clean ASS file without overlaps: {os.path.basename(updated_subtitle_path)}")
-        print(f"📊 Generated {len(new_dialogue_lines)} dialogue lines with non-overlapping timing")
-        
-        # Verify the file was created correctly
-        if os.path.exists(updated_subtitle_path):
-            file_size = os.path.getsize(updated_subtitle_path)
-            print(f"📁 File size: {file_size} bytes")
-            return updated_subtitle_path
-        else:
-            print("❌ File was not created successfully")
-            return None
-        
-    except Exception as e:
-        print(f"❌ Error creating clean ASS file: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
 
-def parse_speaker_colors_from_styles(styles_section):
-    """Parse speaker colors from ASS style definitions"""
-    speaker_colors = {}
+@app.route('/api/available_clips')
+def get_available_clips():
+    """Get list of available clip files"""
+    clips_dir = os.path.join(os.path.dirname(__file__), 'clips')
+    clips = []
     
-    for style_line in styles_section:
-        if style_line.startswith('Style:'):
-            # Parse: Style: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour...
-            parts = style_line.split(',')
-            if len(parts) >= 4:
-                speaker_name = parts[0].replace('Style: ', '').strip()
-                primary_color = parts[3].strip()  # This is the ASS color format
-                speaker_colors[speaker_name] = primary_color
-                print(f"🎨 Parsed {speaker_name}: {primary_color}")
+    if os.path.exists(clips_dir):
+        for file in sorted(os.listdir(clips_dir)):
+            if file.endswith('.mp4') and not file.endswith('_no_captions.mp4') and not file.startswith('.'):
+                clips.append(file)
     
-    return speaker_colors
+    return jsonify({'clips': clips})
 
-def create_fixed_pop_effect(speaker_name, speaker_colors):
-    """Create pop-out effect that uses the speaker's actual color"""
-    # Get speaker's color, fallback to default
-    speaker_color = speaker_colors.get(speaker_name, "&H00FF4500")  # Default orange
+@app.route('/api/fix_job/<job_id>', methods=['POST'])
+def fix_job_data(job_id):
+    """Fix missing job data by reconstructing from files"""
+    if job_id not in active_jobs:
+        return jsonify({'error': 'Job not found'}), 404
     
-    # Create pop-out effect with fade-in and scaling, using speaker's color
-    pop_effect = f"{{\\fad(100,50)\\t(0,200,\\fscx120\\fscy120)\\t(200,300,\\fscx100\\fscy100)\\c{speaker_color}}}"
+    job = active_jobs[job_id]
     
-    return pop_effect
+    # Try to reconstruct clip data
+    reconstructed = attempt_reconstruct_clip_data(job)
+    if reconstructed:
+        if not job.clip_data:
+            job.clip_data = {}
+        
+        # Update job clip data with reconstructed data
+        job.clip_data.update(reconstructed)
+        
+        # Extract captions if subtitle file exists
+        if reconstructed.get('subtitle_file'):
+            caption_data = extract_caption_data({'subtitle_file': reconstructed['subtitle_file']})
+            job.clip_data['captions'] = caption_data
+        
+        return jsonify({
+            'success': True,
+            'message': 'Job data reconstructed',
+            'clip_data': job.clip_data
+        })
+    
+    return jsonify({'error': 'Could not reconstruct job data'}), 400
 
-def format_viral_words_with_speaker_color(text, speaker_name, speaker_colors):
-    """Format viral words using speaker's actual color instead of hardcoded color"""
-    viral_keywords = [
-        'fucking', 'shit', 'damn', 'crazy', 'insane', 'ridiculous',
-        'amazing', 'incredible', 'awesome', 'epic', 'legendary'
-    ]
-    
-    # Get speaker's color for viral word formatting
-    speaker_color = speaker_colors.get(speaker_name, "&H00FF4500")  # Default orange
-    
-    formatted_text = text
-    for word in viral_keywords:
-        if word.lower() in text.lower():
-            # 🔧 FIXED: Use speaker's color instead of hardcoded color, and proper reset
-            viral_format = f"{{\\\\c{speaker_color}\\\\fs26}}{word.upper()}{{\\\\r\\\\c{speaker_color}}}"
-            
-            import re
-            pattern = re.compile(re.escape(word), re.IGNORECASE)
-            formatted_text = pattern.sub(viral_format, formatted_text)
-    
-    return formatted_text
-
-def seconds_to_ass_time_fixed(seconds):
-    """Convert seconds to ASS time format (H:MM:SS.CC)"""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    centiseconds = int((seconds % 1) * 100)
-    return f"{hours}:{minutes:02d}:{secs:02d}.{centiseconds:02d}"
-
-def format_viral_words_clean_fixed(text, speaker_color):
-    """Format viral words with CLEAN formatting (no double escaping)"""
-    viral_keywords = [
-        'fucking', 'shit', 'damn', 'crazy', 'insane', 'ridiculous',
-        'amazing', 'incredible', 'awesome', 'epic', 'legendary'
-    ]
-    
-    formatted_text = text
-    for word in viral_keywords:
-        if word.lower() in text.lower():
-            # FIXED: Raw string to avoid escape issues
-            viral_format = r"{\c" + speaker_color + r"\fs24\b1}" + word.upper() + r"{\r\c" + speaker_color + r"}"
-            
-            import re
-            pattern = re.compile(re.escape(word), re.IGNORECASE)
-            # Use raw string replacement to avoid escape issues
-            formatted_text = pattern.sub(lambda m: viral_format, formatted_text)
-    
-    return formatted_text
-
-def get_original_video_path(clip_data):
-    """Get the path to the original video without captions (for regeneration)"""
-    # For now, we'll use the current path and assume it's the source
-    # In a more sophisticated system, we might keep the pre-caption video
-    return clip_data['path']
-
-@app.route('/api/update_captions', methods=['POST'])
-def update_captions():
-    """🆕 HYBRID APPROACH: Update captions with live preview + background regeneration"""
-    data = request.json
-    job_id = data.get('job_id')
-    captions = data.get('captions', [])
+@app.route('/api/refresh_video/<job_id>')
+def refresh_video(job_id):
+    """Refresh video data"""
+    user = get_current_user()
+    session_id = get_or_create_session_id()
     
     if job_id not in active_jobs:
         return jsonify({'error': 'Job not found'}), 404
     
     job = active_jobs[job_id]
+    
+    # Check authorization
+    if job.user_id:
+        if not user or job.user_id != user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+    else:
+        if job.session_id != session_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+    
     if not job.clip_data:
         return jsonify({'error': 'No clip data available'}), 400
     
-    try:
-        # Preprocess captions to fix fragmentation
-        print(f"🔍 Checking {len(captions)} captions for fragmentation...")
-        avg_text_length = sum(len(c.get('text', '')) for c in captions) / len(captions) if captions else 0
-        
-        if avg_text_length < 5:  # Only merge if VERY fragmented (was 20)
-            print("⚠️ Detected fragmented captions from frontend, merging...")
-            captions = merge_fragmented_captions(captions)
-            print(f"✅ Merged to {len(captions)} proper captions")
+    caption_data = extract_caption_data(job.clip_data)
+    job.clip_data['captions'] = caption_data
+    
+    video_path = job.clip_data['path']
+    filename = os.path.basename(video_path)
+    cache_buster = str(int(time.time()))
+    
+    return jsonify({
+        'status': 'success',
+        'clip_data': job.clip_data,
+        'captions': caption_data,
+        'video_url': f"/clips/{filename}?v={cache_buster}"
+    })
+
+
+@app.route('/api/debug/job/<job_id>')
+def debug_job(job_id):
+    """Debug endpoint to check job data"""
+    if job_id not in active_jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    job = active_jobs[job_id]
+    
+    # Check if files exist
+    files_info = {}
+    if job.clip_data and 'path' in job.clip_data:
+        video_path = job.clip_data['path']
+        files_info['video_exists'] = os.path.exists(video_path)
+        files_info['video_path'] = video_path
+        files_info['video_size'] = os.path.getsize(video_path) if os.path.exists(video_path) else 0
+    else:
+        # Try to find video files based on patterns
+        clips_dir = os.path.join(os.path.dirname(__file__), 'clips')
+        possible_files = []
+        if os.path.exists(clips_dir):
+            for file in os.listdir(clips_dir):
+                if file.endswith('.mp4') and not file.endswith('_no_captions.mp4'):
+                    possible_files.append(file)
+        files_info['possible_video_files'] = possible_files
+    
+    if job.clip_data and 'subtitle_file' in job.clip_data:
+        subtitle_path = job.clip_data['subtitle_file']
+        files_info['subtitle_exists'] = os.path.exists(subtitle_path)
+        files_info['subtitle_path'] = subtitle_path
+    
+    # Try to reconstruct clip data if missing
+    reconstructed_data = None
+    if not job.clip_data or not job.clip_data.get('path'):
+        reconstructed_data = attempt_reconstruct_clip_data(job)
+    
+    return jsonify({
+        'job_id': job_id,
+        'status': job.status,
+        'progress': job.progress,
+        'message': job.message,
+        'clip_data_keys': list(job.clip_data.keys()) if job.clip_data else None,
+        'has_captions': 'captions' in job.clip_data if job.clip_data else False,
+        'captions_count': len(job.clip_data.get('captions', [])) if job.clip_data else 0,
+        'files_info': files_info,
+        'error': job.error,
+        'reconstructed_data': reconstructed_data
+    })
+
+def attempt_reconstruct_clip_data(job):
+    """Attempt to reconstruct clip data from available files"""
+    clips_dir = os.path.join(os.path.dirname(__file__), 'clips')
+    
+    # Look for video files that might match this job
+    video_patterns = [
+        f"auto_peak_clip_*_{job.start_time or job.duration}s.mp4",
+        f"auto_peak_clip__{job.start_time or job.duration}s.mp4",
+        f"clip_{job.job_id}.mp4"
+    ]
+    
+    import glob
+    for pattern in video_patterns:
+        matches = glob.glob(os.path.join(clips_dir, pattern))
+        if matches:
+            video_path = matches[0]
+            video_filename = os.path.basename(video_path)
             
-            # Log the merged captions for debugging
-            for i, cap in enumerate(captions[:5]):  # Show first 5
-                print(f"  {i+1}. {cap.get('speaker', 'Unknown')}: {cap.get('text', '')[:50]}...")
-        
-        # Start background regeneration with ASS system
-        regeneration_thread = threading.Thread(
-            target=regenerate_video_background_ass, 
-            args=(job_id, captions)
-        )
-        regeneration_thread.daemon = True
-        regeneration_thread.start()
-        
-        # Return immediately with success (hybrid approach)
-        return jsonify({
-            'status': 'success', 
-            'message': 'Caption update started. Video is being regenerated in background.',
-            'regeneration_started': True
-        })
-        
+            # Look for corresponding subtitle file
+            subtitle_path = video_path.replace('.mp4', '_captions.ass')
+            
+            return {
+                'path': video_path,
+                'filename': video_filename,
+                'subtitle_file': subtitle_path if os.path.exists(subtitle_path) else None,
+                'reconstructed': True
+            }
+    
+    return None
+
+
+# ==================== ERROR PAGES ====================
+
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('500.html'), 500
+
+
+# ==================== CLEANUP ====================
+
+def cleanup_expired_clips():
+    """Cleanup expired anonymous clips periodically"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute('SELECT cleanup_expired_anonymous_clips()')
+        conn.commit()
+        print("Cleaned up expired anonymous clips")
     except Exception as e:
-        return jsonify({'error': f'Failed to start caption update: {str(e)}'}), 500
+        print(f"Error cleaning up clips: {e}")
+    finally:
+        cur.close()
+        conn.close()
 
-@socketio.on('connect')
-def handle_connect():
-    """Handle client connection"""
-    print('Client connected')
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Handle client disconnection"""
-    print('Client disconnected')
+def schedule_cleanup():
+    while True:
+        time.sleep(3600)  # Run every hour
+        cleanup_expired_clips()
+
 
 if __name__ == '__main__':
-    # Ensure clips directory exists
+    # Ensure required directories exist
     os.makedirs('clips', exist_ok=True)
+    os.makedirs('downloads', exist_ok=True)
     
-    # Initialize OAuth on startup
-    print("🔐 Checking OAuth status...")
-    oauth_status = check_oauth_status()
-    if oauth_status['authenticated']:
-        print(f"✅ OAuth: {oauth_status['message']}")
-    else:
-        print(f"⚠️  OAuth: {oauth_status['message']}")
-        print("   📝 You'll need to authenticate via the web interface to upload videos")
+    # Run migration for anonymous clips
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("anonymous_clips_migration", "migrations/002_anonymous_clips.py")
+        migration_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration_module)
+        migration_module.run_migration()
+    except Exception as e:
+        print(f"Migration warning: {e}")
     
-    # Run the app
-    print("🎯 Starting Viral Clipper Web App with OAuth...")
+    # Start cleanup thread
+    cleanup_thread = threading.Thread(target=schedule_cleanup)
+    cleanup_thread.daemon = True
+    cleanup_thread.start()
+    
+    print("🎯 Starting Multi-Page Viral Clipper Web App...")
     print("🌐 Access at: http://localhost:5000")
-    print("📤 YouTube upload: " + ("Ready" if oauth_status['authenticated'] else "Requires authentication"))
+    print("📄 Multi-page architecture enabled")
+    print("🔓 Anonymous clip generation: ENABLED")
+    print("🔐 Authentication: OPTIONAL (required for upload)")
+    
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
