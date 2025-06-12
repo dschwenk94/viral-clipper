@@ -38,3 +38,15 @@ client_secrets.json
 # Database
 *.db
 *.sqlite
+
+# Temporary files
+*.tmp
+*.bak
+*_old.*
+
+# OS files
+.DS_Store
+Thumbs.dbclient_secrets.json
+client_secrets_old.json
+*.pickle
+.env
